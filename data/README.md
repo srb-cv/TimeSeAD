@@ -1,5 +1,7 @@
 This directory contains all raw data files to be loaded.
 
+For an overview of how raw datasets are instantiated, split, transformed, and batched in code, see [TimeSeAD data loading pipeline](../timesead/data/data_loading_pipeline.md).
+
 | dataset | #features | #constant | #samples | #anomalies [intervals/points/percent] | anomaly lengths | anomaly positions | feature distribution |
 | - | - | - | - | - | - | - | - |
 | ExathlonDataset01(train) | 19 | 0(n) | 6/41382 | 0 | - | - | ![-](https://github.com/wagner-d/TimeSeAD/blob/master/resources/datasets/ExathlonDataset01/train/feature_distribution.png?raw=true) |

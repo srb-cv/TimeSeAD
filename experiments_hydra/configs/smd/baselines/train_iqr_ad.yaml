@@ -1,0 +1,112 @@
+# @package _global_
+dataset:
+  name: SMDDataset
+  ds_args:
+    training: true
+    server_id: 0
+  pipeline: {}
+  test_pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 32
+  use_dataset_pipeline: true
+  split: [0.0, 1.0]
+  split_axis: time
+
+training:
+  batch_size: 128
+  batch_dim: 0
+  num_workers: 0
+  drop_last: false
+  device: cpu
+  seed: 0
+
+detector:
+  std_factor: 2.58
+  first_diffs: true
+  cum_method: mean
+  feature_index: null
+  input_shape: btf
+
+experiment:
+  name: smd.baselines.train_iqr_ad
+  family: baseline
+  entrypoint: experiments_hydra.baselines.train_iqr_ad
+  mlflow_experiment_name: TimeSeAD-Hydra
+  tracking_uri: null
+  train_detector: true
+  tags:
+    pilot: "true"
+
+sweep:
+  selection_metric: best_ts_f1_score
+  validation_metric: best_ts_f1_score
+  evaluation_metrics:
+    - best_ts_f1_score
+    - ts_auprc
+    - best_ts_f1_score_classic
+    - ts_auprc_unweighted
+    - best_f1_score
+    - auprc
+  mode: max
+  training_param_updates:
+    dataset:
+      name: SMDDataset
+    training:
+      epochs: 1
+  detector_param_grid:
+    detector:
+      std_factor:
+        - 1.28
+        - 1.64
+        - 1.96
+        - 2.33
+        - 2.58
+        - 3.09
+      first_diffs:
+        - true
+        - false
+      cum_method:
+        - mean
+        - max
+      feature_index:
+        - null
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+        - 19
+        - 20
+        - 21
+        - 22
+        - 23
+        - 24
+        - 25
+        - 26
+        - 27
+        - 28
+        - 29
+        - 30
+        - 31
+        - 32
+        - 33
+        - 34
+        - 35
+        - 36
+        - 37

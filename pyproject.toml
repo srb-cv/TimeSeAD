@@ -40,6 +40,10 @@ dependencies = [
   "pyod",
   "einops",
   # "treeple", # For now we need to build from source (please refer to README.md)
+  "pytest>=9.0.2",
+  "hydra-core>=1.3.2",
+  "omegaconf>=2.3",
+  "mlflow>=3.10.1",
 ]
 
 [project.optional-dependencies]
@@ -61,5 +65,5 @@ docs = [
 Homepage = "https://github.com/denix56/TimeSeAD"
 
 [tool.uv.build-backend]
-module-name = ["timesead", "timesead_experiments"]
+module-name = ["timesead", "timesead_experiments", "experiments_hydra"]
 module-root = ""

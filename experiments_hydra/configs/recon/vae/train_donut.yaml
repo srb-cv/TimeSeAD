@@ -1,0 +1,99 @@
+# @package _global_
+dataset:
+  name: SWaTDataset
+  ds_args:
+    training: true
+  pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 120
+    reconstruction:
+      class: ReconstructionTargetTransform
+      args:
+        replace_labels: true
+  test_pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 120
+  use_dataset_pipeline: true
+  split: [0.75, 0.25]
+  split_axis: time
+
+training:
+  optimizer:
+    class: torch.optim.Adam
+    args: {}
+  batch_size: 128
+  batch_dim: 0
+  num_workers: 0
+  drop_last: false
+  scheduler:
+    class: torch.optim.lr_scheduler.MultiStepLR
+    args:
+      milestones: [20]
+      gamma: 0.1
+  epochs: 70
+  device: cpu
+  loss: timesead.models.generative.donut.MaskedVAELoss
+  trainer: timesead.optim.trainer.Trainer
+  trainer_hooks:
+    - event: post_validation
+      hook: timesead.optim.trainer.EarlyStoppingHook
+  checkpoint_interval: 15
+  deterministic: false
+  seed: 0
+
+model:
+  hidden_dims: [100, 100]
+  latent_dim: 20
+  mask_prob: 0.01
+
+detector:
+  num_mc_samples: 1024
+
+experiment:
+  name: recon.vae.train_donut
+  family: generative
+  entrypoint: experiments_hydra.generative.vae.train_donut
+  mlflow_experiment_name: TimeSeAD-Hydra
+  tracking_uri: null
+  train_detector: true
+  tags:
+    pilot: "true"
+
+sweep:
+  selection_metric: best_ts_f1_score_classic
+  validation_metric: best_ts_f1_score_classic
+  evaluation_metrics:
+    - best_ts_f1_score_classic
+    - best_f1_score
+    - auprc
+  mode: max
+  training_param_updates:
+    training:
+      epochs: 1
+  training_param_grid:
+    model:
+      hidden_dims:
+        - [100, 100]
+        - [100, 100, 100]
+      latent_dim:
+        - 20
+        - 50
+      mask_prob:
+        - 0.01
+    dataset:
+      pipeline:
+        window:
+          args:
+            window_size:
+              - 10
+              - 50
+              - 100
+  detector_param_grid:
+    detector:
+      num_mc_samples:
+        - 2
+        - 64

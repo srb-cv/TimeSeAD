@@ -266,7 +266,7 @@ class ExathlonDataset(BaseTSDataset):
     @staticmethod
     def get_default_pipeline() -> Dict[str, Dict[str, Any]]:
         return {
-            'subsample': {'class': 'SubsampleTransform', 'args': {'subsampling_factor': 5, 'aggregation': 'mean'}},
+            'subsample': {'class': 'SubsampleTransform', 'args': {'subsampling_factor': 5, 'aggregation': 'last'}},
             'cache': {'class': 'CacheTransform', 'args': {}}
         }
 

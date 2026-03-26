@@ -1,0 +1,88 @@
+# @package _global_
+dataset:
+  name: SMDDataset
+  ds_args:
+    training: true
+    server_id: 0
+  pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 12
+    reconstruction:
+      class: ReconstructionTargetTransform
+      args:
+        replace_labels: true
+  test_pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 12
+  use_dataset_pipeline: true
+  split: [0.75, 0.25]
+  split_axis: time
+
+training:
+  optimizer:
+    class: torch.optim.Adam
+    args: {}
+  batch_size: 128
+  batch_dim: 0
+  num_workers: 0
+  drop_last: false
+  scheduler:
+    class: torch.optim.lr_scheduler.MultiStepLR
+    args:
+      milestones: [20]
+      gamma: 0.1
+  epochs: 70
+  device: cpu
+  loss: torch.nn.MSELoss
+  trainer: timesead.optim.trainer.Trainer
+  trainer_hooks:
+    - event: post_validation
+      hook: timesead.optim.trainer.EarlyStoppingHook
+  checkpoint_interval: 15
+  deterministic: false
+  seed: 0
+
+model:
+  z_size: 40
+
+experiment:
+  name: smd.reconstruction.train_dense_ae
+  family: reconstruction
+  entrypoint: experiments_hydra.reconstruction.train_dense_ae
+  mlflow_experiment_name: TimeSeAD-Hydra
+  tracking_uri: null
+  train_detector: true
+  tags:
+    pilot: "true"
+    dataset_family: smd
+
+sweep:
+  selection_metric: val_loss_0
+  validation_metric: best_ts_f1_score
+  evaluation_metrics:
+    - best_ts_f1_score
+    - ts_auprc
+    - best_ts_f1_score_classic
+    - ts_auprc_unweighted
+    - best_f1_score
+    - auprc
+  mode: min
+  training_param_updates:
+    training:
+      epochs: 100
+  training_param_grid:
+    model:
+      z_size: [20, 30, 40, 50]
+    dataset:
+      pipeline:
+        window:
+          args:
+            window_size: [10, 25, 50, 75, 100, 150]
+    training:
+      optimizer:
+        args:
+          lr: [1.0e-4, 1.0e-3, 1.0e-2]

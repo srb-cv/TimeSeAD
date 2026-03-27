@@ -38,3 +38,8 @@ If you use our work, please consider citing the paper
 ```
 
 To get in touch you can reach us via [email](mailto:wagnerd@rhrk.uni-kl.de,tmichels@cs.uni-kl.de,naira@rptu.de).
+
+
+
+### New Experiments
+timesead_experiments runs experiments using Sacred. As an alternative, experiments_hydra provides training through hydra configs and tracking through MLFlow.

@@ -18,11 +18,11 @@ from experiments_hydra.utils import (
 @hydra_main(
     version_base=None,
     config_path="../configs",
-    config_name="exathlon/prediction/train_lstm_prediction_filonov",
+    config_name="dmc/prediction/train_lstm_prediction_filonov",
 )
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-
+    exit()
     with start_mlflow_run(cfg) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))

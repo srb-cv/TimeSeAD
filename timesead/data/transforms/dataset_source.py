@@ -151,6 +151,8 @@ def make_dataset_split(dataset: BaseTSDataset, *splits: float, axis: str = 'batc
         starts, ends = [[] for _ in percent], [[] for _ in percent]
         for data_l in data_len:
             lengths = torch.floor(percent * data_l).to(torch.int64)
+
+            # Handle rounding errors
             rest = data_l - torch.sum(lengths).item()
             rest = torch.tensor([1] * rest + [0] * (len(lengths) - rest))
             lengths += rest
@@ -162,5 +164,9 @@ def make_dataset_split(dataset: BaseTSDataset, *splits: float, axis: str = 'batc
                 starts[i].append(start)
                 ends[i].append(cum_bound)
 
+        
+        # starts: [[0, 0, 0, 0, 0, 0], [10794, 2018, 2694, 2694, 2046, 10794]]
+
+        # ends: [[10794, 2018, 2694, 2694, 2046, 10794], [14391, 2690, 3591, 3591, 2728, 14391]]
         for start, end in zip(starts, ends):
             yield DatasetSource(dataset, start, end, axis=axis)

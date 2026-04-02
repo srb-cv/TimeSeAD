@@ -33,7 +33,8 @@ def _linear_interpolate_sequence(x: torch.Tensor, positions: torch.Tensor) -> to
 
     return lower_weight * lower_vals + upper_weight * upper_vals
 
-
+# [ x1, x2, x3, x4, x5, x6 ]
+# [ agg(x1,x2), agg(x3,x4), agg(x5,x6) ]
 class SubsampleTransform(Transform):
     """Subsample sequences by aggregating consecutive observations.
 

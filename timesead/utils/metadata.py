@@ -67,7 +67,7 @@ __all__ = ['PROJECT_ROOT', 'DATA_DIRECTORY', 'LOG_DIRECTORY', 'RESOURCE_DIRECTOR
 # Default configuration
 settings = {}
 settings['PROJECT_ROOT'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../')
-settings['DATA_DIRECTORY'] = os.path.join(settings['PROJECT_ROOT'], 'data')
+settings['DATA_DIRECTORY'] =  os.path.join("/scratch/cor54gyp/timesead/", 'data') #os.path.join(settings['PROJECT_ROOT'], 'data')
 settings['LOG_DIRECTORY'] = os.path.join(settings['PROJECT_ROOT'], 'log')
 settings['RESOURCE_DIRECTORY'] = os.path.join(settings['PROJECT_ROOT'], 'resources')
 settings['DISABLE_NVIDIA_SMI'] = False

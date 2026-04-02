@@ -104,6 +104,7 @@ def str2cls(fully_qualified_name: str, base_module: Optional[str] = None):
         # load the module, will raise ImportError if module cannot be loaded
         m = importlib.import_module(fully_qualified_name[0])
     elif base_module is not None:
+        # <module 'timesead.data' from '/home/cor54gyp/TimeSeAD/timesead/data/__init__.py'>
         m = importlib.import_module(base_module)
     else:
         m = Bunch(globals())
@@ -143,6 +144,7 @@ def objspec2constructor(obj_spec: Union[str, Dict[str, Union[str, Dict[str, Any]
 
     # The third case is that we got a dict of the form
     # {'class': 'MyClass', 'args': {'arg1': 'val'}} or without any args {'class': 'MyClass'}
+    # <class 'timesead.data.exathlon_dataset.ExathlonDataset'>
     cls = str2cls(obj_spec['class'], base_module=base_module)
     spec_args = dict(obj_spec['args']) if 'args' in obj_spec else {}
     # kwargs input to this call take precedence over those specified in the spec

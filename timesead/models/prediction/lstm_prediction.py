@@ -328,11 +328,16 @@ class LSTMS2SPredictionAnomalyDetector(PredictionAnomalyDetector):
         moving_avg_denom = 0
 
         # Compute exp moving average of error score
+        # b_inputs = (window_)
         for b_inputs, b_targets in dataset:
             b_inputs = tuple(b_inp.to(self.dummy.device) for b_inp in b_inputs)
             b_targets = tuple(b_tar.to(self.dummy.device) for b_tar in b_targets)
 
+            # x: ([50, 128, 19])
             x, = b_inputs
+            
+            # label: ([50, 128])
+            # target: ([50, 128, 19])
             label, target = b_targets
 
             sq_error, moving_avg_num, moving_avg_denom = self.compute_online_anomaly_score((x, target, moving_avg_num,
@@ -340,6 +345,7 @@ class LSTMS2SPredictionAnomalyDetector(PredictionAnomalyDetector):
             errors.append(sq_error)
             labels.append(label.cpu())
 
+        #flatten into point-wise
         scores = torch.cat(errors, dim=1).transpose(0, 1).flatten()
         labels = torch.cat(labels, dim=1).transpose(0, 1).flatten()
 

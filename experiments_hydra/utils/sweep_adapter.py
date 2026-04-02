@@ -102,6 +102,14 @@ def build_hydra_overrides(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def format_hydra_override_strings(point: Dict[str, Any], extra_overrides: Iterable[str] = ()) -> List[str]:
+    # This function converts a config dictionary into Hydra command-line override strings.
+    #     point = {
+    #   "model.lr": 0.001,
+    #   "trainer.batch_size": 32 }
+    # => [
+    #   "++model.lr=0.001",
+    #   "++trainer.batch_size=32"
+    # ]
     overrides = []
     for key, value in _flatten_overrides(point):
         encoded = _encode_override_value(value)

@@ -1,6 +1,6 @@
 sweep:
   experiment_config: null
-  config_path: null
+  config_path: "/home/cor54gyp/TimeSeAD/experiment_configs/exathlon/prediction/train_lstm_prediction_filonov_on_exathlon.yml"
   selection_metric: null
   mode: min
   max_runs: null

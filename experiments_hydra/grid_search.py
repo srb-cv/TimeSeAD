@@ -12,7 +12,7 @@ from mlflow.tracking import MlflowClient
 
 from timesead.utils.metadata import PROJECT_ROOT
 
-from .utils.sweep_adapter import (
+from experiments_hydra.utils.sweep_adapter import (
     EXPERIMENT_MODULE_MAP,
     build_hydra_overrides,
     format_hydra_override_strings,
@@ -110,6 +110,8 @@ def run(cfg) -> Dict[str, Any]:
         params = spec["params"]
         training_experiment = params["training_experiment"]
         module_name = get_experiment_module(training_experiment)
+
+        # building different hyperparameters for training + detector
         points = build_hydra_overrides(spec)
         selection_metric = cfg.sweep.selection_metric or params.get("selection_metric") or params["validation_metric"]
         mode = cfg.sweep.mode
@@ -119,7 +121,7 @@ def run(cfg) -> Dict[str, Any]:
         points = points[: cfg.sweep.max_runs]
 
     tracking_uri = _resolve_tracking_uri(cfg.sweep.tracking_uri)
-    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_tracking_uri(tracking_uri) # file:///home/cor54gyp/TimeSeAD/timesead/utils/../..//mlruns_hydra
     client = MlflowClient(tracking_uri=tracking_uri)
 
     hydra_output_dir = Path(HydraConfig.get().runtime.output_dir)

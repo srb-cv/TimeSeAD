@@ -20,6 +20,7 @@ from experiments_hydra.utils import (
     config_path="../configs",
     config_name="exathlon/prediction/train_lstm_prediction_filonov",
 )
+
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
 

@@ -114,11 +114,14 @@ def _load_detector(run_dir: Path, training_cfg: Dict[str, Any], device: str):
 
 
 def _compute_metrics(training_cfg: Dict[str, Any], cli_cfg: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
-    eval_dataset_cfg, split_index = _build_eval_dataset_cfg(training_cfg, cli_cfg)
+    eval_dataset_cfg, split_index = _build_eval_dataset_cfg(training_cfg, cli_cfg) # split_index = 1
+
+    # Load test dataset
     datasets = load_dataset(**eval_dataset_cfg)
     eval_ds = datasets[split_index]
     loader = get_dataloader(eval_ds, {**training_cfg["training"], "shuffle": False})
 
+    ########## Computing AD Score ##########
     detector = _load_detector(run_dir, training_cfg, training_cfg["training"]["device"])
     detector.eval()
 
@@ -127,6 +130,8 @@ def _compute_metrics(training_cfg: Dict[str, Any], cli_cfg: Dict[str, Any], run_
         labels, scores = detector.get_labels_and_scores(loader, subseq_lengths=subseq_lengths, window_size=window_size)
     else:
         labels, scores = detector.get_labels_and_scores(loader)
+    ##############################################
+
 
     requested_metrics = cli_cfg.get("metric_names")
     if requested_metrics is None:
@@ -137,6 +142,7 @@ def _compute_metrics(training_cfg: Dict[str, Any], cli_cfg: Dict[str, Any], run_
         if metric not in metric_names:
             metric_names.append(metric)
 
+    ########## Computing Metrics ##########
     evaluator = Evaluator()
     metrics = {}
     validation_metric = training_cfg["sweep"]["validation_metric"]
@@ -148,6 +154,7 @@ def _compute_metrics(training_cfg: Dict[str, Any], cli_cfg: Dict[str, Any], run_
             if metric_name == validation_metric:
                 raise
             metrics[metric_name] = {"score": None, "info": {"error": str(exc)}}
+    ##############################################
 
     return {
         "metrics": metrics,
@@ -181,6 +188,8 @@ def _maybe_log_to_mlflow(training_cfg: Dict[str, Any], cli_cfg: Dict[str, Any], 
 
 @hydra.main(version_base=None, config_path="configs/evaluate", config_name="default")
 def run(cfg) -> Dict[str, Any]:
+
+    ########## 1. Configuration Loading ##########
     cfg = to_plain_config(cfg)
     if cfg["run_dir"] is None:
         raise ValueError("Set run_dir to the Hydra output directory of a finished training run.")
@@ -191,7 +200,13 @@ def run(cfg) -> Dict[str, Any]:
         raise FileNotFoundError(f"Hydra config file {hydra_config_path} does not exist.")
 
     training_cfg = to_plain_config(OmegaConf.load(hydra_config_path))
+
+    ##############################################
+    # cfg: the configuration of evaluate.py
+    # training_cfg: the configuration of train
+    # run_dir: the output direction of model
     summary = _compute_metrics(training_cfg, cfg, run_dir)
+
     summary = _sanitize_json(summary)
 
     output_dir = Path(HydraConfig.get().runtime.output_dir)

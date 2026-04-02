@@ -1,0 +1,88 @@
+{
+  "metrics": {
+    # segment-wise
+    "best_ts_f1_score": {
+      "score": 0.43929967284202576,
+      "info": {
+        "threshold": 3.799682855606079,
+        "precision": 0.30804309248924255,
+        "recall": 0.7654614448547363
+      }
+    },
+    
+    "ts_auprc": {
+      "score": null,
+      "info": {
+        "error": "'float' object has no attribute 'item'"
+      }
+    },
+
+    # try many threshold?
+    # Point-wise
+    "best_ts_f1_score_classic": {
+      "score": 0.5690218806266785,
+      "info": {
+        "threshold": 4.4674072265625,
+        "precision": 0.5899960398674011,
+        "recall": 0.549487829208374
+      }
+    },
+
+    "ts_auprc_unweighted": {
+      "score": null,
+      "info": {
+        "error": "'float' object has no attribute 'item'"
+      }
+    },
+
+    "best_f1_score": {
+      "score": 0.4407995899538698,
+      "info": {
+        "threshold": 3.7999939918518066
+      }
+    },
+
+    "auprc": {
+      "score": null,
+      "info": {
+        "error": "'float' object has no attribute 'item'"
+      }
+    }
+  },
+
+  "num_scores": 9700,
+
+  "dataset": {
+    "name": "ExathlonDataset",
+    "ds_args": {
+      "training": false,
+      "app_id": 1
+    },
+    "pipeline": {
+      "prediction": {
+        "class": "timesead.models.prediction.LSTMS2STargetTransform",
+        "args": {
+          "window_size": 50,
+          "replace_labels": false
+        }
+      }
+    },
+    "test_pipeline": {
+      "prediction": {
+        "class": "timesead.models.prediction.LSTMS2STargetTransform",
+        "args": {
+          "window_size": 50,
+          "replace_labels": false
+        }
+      }
+    },
+    "use_dataset_pipeline": true,
+    "split": [
+      0,
+      1.0
+    ],
+    "split_axis": "time"
+  },
+  
+  "split_index": 1
+}

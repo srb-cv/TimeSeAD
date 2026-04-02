@@ -1,7 +1,7 @@
-run_dir: outputs/2026-03-25/22-42-39
+run_dir: outputs/2026-03-31/14-06-16
 run_id: null
 tracking_uri: null
-split: null
+split: [0, 1.0]
 split_axis: null
 split_index: null
 metric_names: null

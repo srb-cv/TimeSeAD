@@ -182,8 +182,10 @@ class ExathlonDataset(BaseTSDataset):
 
         if download:
             self.download()
+
         if not self._check_exists():
             raise RuntimeError('Dataset not found. You can use download=True to download it.')
+        
         if not self._check_preprocessed():
             if not preprocess:
                 raise RuntimeError('Dataset needs to be processed for proper working. Pass preprocess=True to setup the'
@@ -295,6 +297,8 @@ class ExathlonDataset(BaseTSDataset):
 
     def _check_preprocessed(self) -> bool:
         # Only checks if the `processed` folder exsits
+
+        # self.data_path = /scratch/cor54gyp/timesead/data/exathlon/data/processed
         if not os.path.isdir(self.data_path):
             return False
         return True

@@ -261,7 +261,7 @@ def load_labels(data_path: str) -> pd.DataFrame:
 
     # convert timestamps to datetime format
     for c in ['root_cause_start', 'root_cause_end', 'extended_effect_end']:
-        labels[c] = pd.to_datetime(labels[c], unit='s')
+        labels[c] = pd.to_datetime(labels[c], unit='s') # 1527535260 -> 2018-05-28 19:21:00
     _logger.info('done.')
 
     return labels
@@ -305,7 +305,7 @@ def add_anomaly_column(period_dfs, labels, periods_info, ignored_anomalies: str 
     """
     _logger.info('adding an `Anomaly` column to the Spark traces...')
     for i, period_df in enumerate(period_dfs):
-        period_df['Anomaly'] = 0
+        period_df['Anomaly'] = 0 # normal data
         file_name, trace_type = periods_info[i]
         if trace_type != 'undisturbed':
             for a_t in labels[labels['trace_name'] == file_name].itertuples():
@@ -546,7 +546,7 @@ def preprocess_exathlon_data(raw_data_dir: str, out_data_dir: str, app_ids: List
         period_dfs = add_anomaly_column(period_dfs, labels, periods_info)
         # handle NaN values in the raw period DataFrames
         period_dfs = get_handled_nans(period_dfs)
-        # resample periods with their original resolution to avoid duplicate indices (max to remove the effect of -1s)
+        # resample periods with their original resolution to avoid duplicate indices (max to remove the effect of -1s). Ex: Time window: 12:00:01, values: [3, -1, 5] → max = 5
         period_dfs = get_resampled(period_dfs, '1s', agg='max', anomaly_col=True)
 
         # handle any -1 executor and OS values that unexpectedly occurred during monitoring

@@ -1,0 +1,139 @@
+config = {
+    "dataset": {
+        "name": "ExathlonDataset",
+        "ds_args": {
+            "training": True,
+            "app_id": 1
+        },
+        "pipeline": {
+            "prediction": {
+                "class": "timesead.models.prediction.LSTMS2STargetTransform",
+                "args": {
+                    "window_size": 50,
+                    "replace_labels": True
+                }
+            }
+        },
+        "test_pipeline": {
+            "prediction": {
+                "class": "timesead.models.prediction.LSTMS2STargetTransform",
+                "args": {
+                    "window_size": 50,
+                    "replace_labels": False
+                }
+            }
+        },
+        "use_dataset_pipeline": True,
+        "split": [0.75, 0.25],
+        "split_axis": "time"
+    },
+
+    "training": {
+        "optimizer": {
+            "class": "torch.optim.Adam",
+            "args": {}
+        },
+        "batch_size": 128,
+        "batch_dim": 1,
+        "num_workers": 0,
+        "drop_last": False,
+        "scheduler": {
+            "class": "torch.optim.lr_scheduler.MultiStepLR",
+            "args": {
+                "milestones": [20],
+                "gamma": 0.1
+            }
+        },
+        "epochs": 70,
+        "device": "cpu",
+        "loss": "torch.nn.MSELoss",
+        "trainer": "timesead.optim.trainer.Trainer",
+        "trainer_hooks": [
+            {
+                "event": "post_validation",
+                "hook": "timesead.optim.trainer.EarlyStoppingHook"
+            }
+        ],
+        "checkpoint_interval": 15,
+        "deterministic": False,
+        "seed": 0
+    },
+
+    "model": {
+        "lstm_hidden_dims": [30, 20],
+        "linear_hidden_layers": [],
+        "linear_activation": "torch.nn.ELU",
+        "dropout": 0.0
+    },
+
+    "experiment": {
+        "name": "exathlon.prediction.train_lstm_prediction_filonov",
+        "family": "prediction",
+        "entrypoint": "experiments_hydra.prediction.train_lstm_prediction_filonov",
+        "mlflow_experiment_name": "TimeSeAD-Hydra",
+        "tracking_uri": None,
+        "train_detector": True,
+        "tags": {
+            "pilot": "true"
+        }
+    },
+
+    "sweep": {
+        "selection_metric": "best_ts_f1_score",
+        "validation_metric": "best_ts_f1_score",
+        "evaluation_metrics": [
+            "best_ts_f1_score",
+            "ts_auprc",
+            "best_ts_f1_score_classic",
+            "ts_auprc_unweighted",
+            "best_f1_score",
+            "auprc"
+        ],
+        "mode": "max",
+
+        "training_param_updates": {
+            "dataset": {
+                "name": "ExathlonDataset"
+            },
+            "training": {
+                "epochs": 100
+            }
+        },
+
+        "training_param_grid": {
+            "model": {
+                "lstm_hidden_dims": [
+                    [30, 20],
+                    [50, 30],
+                    [50, 30, 20],
+                    [50, 50, 50]
+                ],
+                "linear_hidden_layers": [
+                    [],
+                    [40],
+                    [30, 30],
+                    [30, 30, 30]
+                ],
+                "dropout": [0.0, 0.15, 0.2]
+            },
+
+            "dataset": {
+                "pipeline": {
+                    "prediction": {
+                        "args": {
+                            "window_size": [10, 50, 75, 100]
+                        }
+                    }
+                }
+            },
+
+            "training": {
+                "optimizer": {
+                    "args": {
+                        "lr": [0.0001, 0.001, 0.01]
+                    }
+                }
+            }
+        }
+    }
+}

@@ -3,7 +3,7 @@ dataset:
   name: DMCDataset
   ds_args:
     training: true
-    app_id: 1
+    app_id: 11
   pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform

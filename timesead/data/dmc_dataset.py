@@ -14,6 +14,8 @@ from timesead.data.dataset import BaseTSDataset
 from timesead.data.preprocessing import minmax_scaler
 from timesead.data.preprocessing.exathlon import preprocess_exathlon_data
 from timesead.utils.metadata import DATA_DIRECTORY
+from timesead.data.preprocessing.dmc import DMCTask, preprocess_dmc_data
+
 
 _logger = logging.getLogger(__name__)
 
@@ -131,16 +133,23 @@ TEST_LENGTHS = {
     10: [10284, 46807, 43230, 5930],
 }
 
-
 class DMCDataset(BaseTSDataset):
     """
     To-Do
     """
     GITHUB_LINK = 'https://github.com/exathlonbenchmark/exathlon.git'
 
-    def __init__(self, dataset_path: str = os.path.join(DATA_DIRECTORY, 'exathlon'), app_id: int = 1,
-                 training: bool = True, standardize: Union[bool, Callable[[pd.DataFrame, Dict], pd.DataFrame]] = True,
-                 download: bool = True, preprocess: bool = True):
+    task_values = [e.value for e in DMCTask]
+
+    def __init__(
+            self,
+            dataset_path: str = os.path.join(DATA_DIRECTORY, 'dmc'),
+            app_id: Union[int, List[int]] = 1,
+            training: bool = True,
+            standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
+            download: bool = True,
+            preprocess: bool = True
+            ):
         """
 
         :param dataset_path: Folder from which to load the dataset.
@@ -153,19 +162,27 @@ class DMCDataset(BaseTSDataset):
         :param preprocess: Whether to setup the dataset for experiments.
         """
 
-        if app_id not in TRAIN_LENGTHS:
-            raise ValueError(f'App ID must be one of {list(TEST_LENGTHS.keys())}')
+        if isinstance(app_id, int):
+            app_id = [app_id]
 
+        self.app_id = []
+        for i in app_id:
+            if i not in self.task_values:
+                raise ValueError(f'DMC Task must be one of {self.task_values}')
+            else:
+                self.app_id.append(DMCTask(i))
+
+        
+        
         self.dataset_path = dataset_path
-        self.data_path = os.path.join(dataset_path, 'data', 'processed')
-        self.app_id = app_id
+        self.data_path = os.path.join(dataset_path, 'processed')
         self.training = training
 
-        if download:
-            self.download()
         if not self._check_exists():
             raise RuntimeError('Dataset not found. You can use download=True to download it.')
-        if not self._check_preprocessed():
+        
+        missing_tasks = self._search_missing_preprocessed_tasks()
+        if len(missing_tasks) == 0:
             if not preprocess:
                 raise RuntimeError('Dataset needs to be processed for proper working. Pass preprocess=True to setup the'
                                    ' dataset.')
@@ -269,37 +286,37 @@ class DMCDataset(BaseTSDataset):
 
     def _check_exists(self) -> bool:
         # Only checks if the `data` folder exists
-        data_folder_path = os.path.join(self.dataset_path, 'data')
-        if not os.path.isdir(data_folder_path):
-            return False
+        data_types = ['test', 'train']
+        features = ["normal_features", "random_features"]
+
+        for data_type in data_types:
+            for feature in features:
+                for task in self.app_id:
+                    data_folder_path = os.path.join(
+                        self.dataset_path,
+                        data_type,
+                        feature,
+                        task.name.lower()
+                        )
+                    if not os.path.isdir(data_folder_path):
+                        return False
         return True
 
-    def _check_preprocessed(self) -> bool:
+    def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
         # Only checks if the `processed` folder exsits
-        if not os.path.isdir(self.data_path):
-            return False
-        return True
+        data_types = ['test', 'train']
+        features = ["normal_features", "random_features"]
 
-    def download(self) -> None:
-        if self._check_exists():
-            return
-
-        os.makedirs(self.dataset_path, exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Checkout only the required parts from git https://stackoverflow.com/a/63786181/7196402
-            _logger.info(f'Downloading Exathlon dataset from {self.GITHUB_LINK}...')
-            subprocess.run(f'git clone --no-checkout --depth 1 {self.GITHUB_LINK}'.split(), cwd=temp_dir)
-            git_dir = os.path.join(temp_dir, 'exathlon')
-            subprocess.run('git sparse-checkout add data/ extract_data.sh'.split(), cwd=git_dir)
-            subprocess.run('git checkout'.split(), cwd=git_dir)
-
-            shutil.move(os.path.join(git_dir, 'data'), os.path.join(self.dataset_path, 'data'))
-            shutil.move(os.path.join(git_dir, 'extract_data.sh'), os.path.join(self.dataset_path, 'extract_data.sh'))
-
-        _logger.info('Extracting data from zip files...')
-        ret = subprocess.run('extract_data.sh', cwd=self.dataset_path, shell=True)
-        if not ret.returncode:
-            _logger.error('Something went wrong during dataset download.')
-        else:
-            _logger.info('Done!')
+        missing_tasks = []
+        for data_type in data_types:
+            for feature in features:
+                for task in self.app_id:
+                    data_folder_path = os.path.join(
+                        self.data_path,
+                        data_type,
+                        feature,
+                        task.name.lower()
+                        )
+                    if not os.path.isdir(data_folder_path) and task not in missing_tasks:
+                        missing_tasks.append(task)
+        return missing_tasks

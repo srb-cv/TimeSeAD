@@ -22,7 +22,6 @@ from experiments_hydra.utils import (
 )
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-    exit()
     with start_mlflow_run(cfg) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))

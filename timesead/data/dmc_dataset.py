@@ -12,103 +12,16 @@ import torch
 
 from timesead.data.dataset import BaseTSDataset
 from timesead.data.preprocessing import minmax_scaler
-from timesead.data.preprocessing.exathlon import preprocess_exathlon_data
 from timesead.utils.metadata import DATA_DIRECTORY
-from timesead.data.preprocessing.dmc import DMCTask, preprocess_dmc_data
+from timesead.data.preprocessing.dmc import DMCTask, preprocess_dmc_data, get_stats, obtain_meta_data
 
 
 _logger = logging.getLogger(__name__)
 
-TRAIN_FILES = (
-    '1_0_1000000_14.csv',
-    '1_0_100000_15.csv',
-    '1_0_100000_16.csv',
-    '1_0_10000_17.csv',
-    '1_0_500000_18.csv',
-    '1_0_500000_19.csv',
-    '2_0_100000_20.csv',
-    '2_0_100000_22.csv',
-    '2_0_1200000_21.csv',
-    '3_0_100000_24.csv',
-    '3_0_100000_25.csv',
-    '3_0_100000_26.csv',
-    '3_0_1200000_23.csv',
-    '4_0_1000000_31.csv',
-    '4_0_100000_27.csv',
-    '4_0_100000_28.csv',
-    '4_0_100000_29.csv',
-    '4_0_100000_30.csv',
-    '4_0_100000_32.csv',
-    '5_0_100000_33.csv',
-    '5_0_100000_34.csv',
-    '5_0_100000_35.csv',
-    '5_0_100000_36.csv',
-    '5_0_100000_37.csv',
-    '5_0_100000_40.csv',
-    '5_0_50000_38.csv',
-    '5_0_50000_39.csv',
-    '6_0_100000_42.csv',
-    '6_0_100000_43.csv',
-    '6_0_100000_44.csv',
-    '6_0_100000_45.csv',
-    '6_0_100000_46.csv',
-    '6_0_100000_52.csv',
-    '6_0_1200000_41.csv',
-    '6_0_300000_50.csv',
-    '6_0_50000_47.csv',
-    '6_0_50000_48.csv',
-    '6_0_50000_49.csv',
-    '6_0_50000_51.csv',
-    '9_0_100000_1.csv',
-    '9_0_100000_3.csv',
-    '9_0_100000_4.csv',
-    '9_0_100000_6.csv',
-    '9_0_1200000_2.csv',
-    '9_0_300000_5.csv',
-    '10_0_100000_10.csv',
-    '10_0_100000_11.csv',
-    '10_0_100000_13.csv',
-    '10_0_100000_8.csv',
-    '10_0_100000_9.csv',
-    '10_0_1200000_7.csv',
-    '10_0_300000_12.csv',
-)
+TRAIN_FILES = set()
 
 
-TEST_FILES = (
-    '1_2_100000_68.csv',
-    '1_4_1000000_80.csv',
-    '1_5_1000000_86.csv',
-    '2_1_100000_60.csv',
-    '2_2_200000_69.csv',
-    '2_5_1000000_87.csv',
-    '2_5_1000000_88.csv',
-    '3_2_1000000_71.csv',
-    '3_2_500000_70.csv',
-    '3_4_1000000_81.csv',
-    '3_5_1000000_89.csv',
-    '4_1_100000_61.csv',
-    '4_5_1000000_90.csv',
-    '5_1_100000_63.csv',
-    '5_1_100000_64.csv',
-    '5_1_500000_62.csv',
-    '5_2_1000000_72.csv',
-    '5_4_1000000_82.csv',
-    '5_5_1000000_91.csv',
-    '5_5_1000000_92.csv',
-    '6_1_500000_65.csv',
-    '6_3_200000_76.csv',
-    '6_5_1000000_93.csv',
-    '9_2_1000000_66.csv',
-    '9_3_500000_74.csv',
-    '9_4_1000000_78.csv',
-    '9_5_1000000_84.csv',
-    '10_2_1000000_67.csv',
-    '10_3_1000000_75.csv',
-    '10_4_1000000_79.csv',
-    '10_5_1000000_85.csv',
-)
-
+TEST_FILES = set()
 
 TRAIN_LENGTHS = {
     1: [14391, 2690, 3591, 3591, 2728, 14391],
@@ -147,7 +60,7 @@ class DMCDataset(BaseTSDataset):
             app_id: Union[int, List[int]] = 1,
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
-            download: bool = True,
+            use_normal_only: bool = True,
             preprocess: bool = True
             ):
         """
@@ -176,40 +89,58 @@ class DMCDataset(BaseTSDataset):
         
         self.dataset_path = dataset_path
         self.data_path = os.path.join(dataset_path, 'processed')
+        self.train_data_path = os.path.join(self.data_path, 'train')
+        self.test_data_path = os.path.join(self.data_path, 'test')
+
         self.training = training
+        self.use_normal_only = use_normal_only
 
         if not self._check_exists():
             raise RuntimeError('Dataset not found. You can use download=True to download it.')
         
         missing_tasks = self._search_missing_preprocessed_tasks()
-        if len(missing_tasks) == 0:
+        if len(missing_tasks) > 0:
             if not preprocess:
                 raise RuntimeError('Dataset needs to be processed for proper working. Pass preprocess=True to setup the'
                                    ' dataset.')
 
             _logger.info("Processed data files not found! Running pre-processing now. This might take several minutes.")
-            preprocess_exathlon_data(os.path.join(dataset_path, 'data', 'raw'), os.path.join(self.data_path))
+            preprocess_dmc_data(
+                missing_tasks=missing_tasks,
+                out_data_dir=self.data_path,
+                raw_data_dir=dataset_path
+            )
 
         self.inputs = None
         self.targets = None
 
+        self.intialize_meta_data(standardize=standardize)
+
+    def intialize_meta_data(self, standardize):
+    
+        self.train_files, self.train_lengths, self.test_files, self.test_lengths = obtain_meta_data(
+            path=self.data_path,
+            tasks=self.app_id,
+            use_normaly_only=self.use_normal_only,
+        )
+
+        stats = get_stats(
+            path=self.train_data_path,
+            tasks=self.app_id,
+            use_normaly_only=self.use_normal_only
+        )
         if callable(standardize):
-            with np.load(os.path.join(self.data_path, 'train', f'train_stats_{app_id}.npz')) as d:
-                stats = dict(d)
             self.standardize_fn = functools.partial(standardize, stats=stats)
         elif standardize:
-            with np.load(os.path.join(self.data_path, 'train', f'train_stats_{app_id}.npz')) as d:
-                stats = dict(d)
             self.standardize_fn = functools.partial(minmax_scaler, stats=stats)
         else:
             self.standardize_fn = None
+        
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        test_str = 'train' if self.training else 'test'
+        load_path = self.train_data_path if self.training else self.test_data_path
 
-        load_path = os.path.join(self.data_path, test_str)
-        files = TRAIN_FILES if self.training else TEST_FILES
-        files = [f for f in files if f.startswith(f'{self.app_id}_')]
+        files = self.train_files if self.training else self.test_files
 
         inputs, targets = [], []
         for f in files:
@@ -248,18 +179,18 @@ class DMCDataset(BaseTSDataset):
         return (torch.as_tensor(self.inputs[item]),), (torch.as_tensor(self.targets[item]),)
 
     def __len__(self) -> Optional[int]:
-        return len(TRAIN_LENGTHS[self.app_id]) if self.training else len(TEST_LENGTHS[self.app_id])
+        return len(self.train_files) if self.training else len(self.test_files)
 
     @property
     def seq_len(self) -> List[int]:
         if self.training:
-            return TRAIN_LENGTHS[self.app_id]
+            return self.train_lengths
         else:
-            return TEST_LENGTHS[self.app_id]
+            return self.test_lengths
 
     @property
     def num_features(self) -> int:
-        return 19
+        return 768
 
     @staticmethod
     def get_default_pipeline() -> Dict[str, Dict[str, Any]]:
@@ -270,19 +201,8 @@ class DMCDataset(BaseTSDataset):
 
     @staticmethod
     def get_feature_names():
-        return ['driver_StreamingMetrics_streaming_lastCompletedBatch_processingDelay_value',
-                'driver_StreamingMetrics_streaming_lastCompletedBatch_schedulingDelay_value',
-                'driver_StreamingMetrics_streaming_lastCompletedBatch_totalDelay_value',
-                '1_diff_driver_StreamingMetrics_streaming_totalCompletedBatches_value',
-                '1_diff_driver_StreamingMetrics_streaming_totalProcessedRecords_value',
-                '1_diff_driver_StreamingMetrics_streaming_totalReceivedRecords_value',
-                '1_diff_driver_StreamingMetrics_streaming_lastReceivedBatch_records_value',
-                '1_diff_driver_BlockManager_memory_memUsed_MB_value',
-                '1_diff_driver_jvm_heap_used_value', '1_diff_node5_CPU_ALL_Idle%', '1_diff_node6_CPU_ALL_Idle%',
-                '1_diff_node7_CPU_ALL_Idle%', '1_diff_node8_CPU_ALL_Idle%',
-                '1_diff_avg_executor_filesystem_hdfs_write_ops_value', '1_diff_avg_executor_cpuTime_count',
-                '1_diff_avg_executor_runTime_count', '1_diff_avg_executor_shuffleRecordsRead_count',
-                '1_diff_avg_executor_shuffleRecordsWritten_count', '1_diff_avg_jvm_heap_used_value']
+        column_names = [f"feature_{i}" for i in range(768)]
+        return column_names
 
     def _check_exists(self) -> bool:
         # Only checks if the `data` folder exists
@@ -305,18 +225,16 @@ class DMCDataset(BaseTSDataset):
     def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
         # Only checks if the `processed` folder exsits
         data_types = ['test', 'train']
-        features = ["normal_features", "random_features"]
+       
 
         missing_tasks = []
         for data_type in data_types:
-            for feature in features:
-                for task in self.app_id:
-                    data_folder_path = os.path.join(
-                        self.data_path,
-                        data_type,
-                        feature,
-                        task.name.lower()
-                        )
-                    if not os.path.isdir(data_folder_path) and task not in missing_tasks:
-                        missing_tasks.append(task)
+            for task in self.app_id:
+                data_folder_path = os.path.join(
+                    self.data_path,
+                    data_type,
+                    task.name.lower()
+                    )
+                if not os.path.isdir(data_folder_path) and task not in missing_tasks:
+                    missing_tasks.append(task)
         return missing_tasks

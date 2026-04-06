@@ -124,6 +124,9 @@ class DMCDataset(BaseTSDataset):
             use_normaly_only=self.use_normal_only,
         )
 
+        assert len(self.train_files) == len(self.train_lengths), "Train files and lengths must have same size."
+        assert len(self.test_files) == len(self.test_lengths), "Test files and lengths must have same size."
+
         stats = get_stats(
             path=self.train_data_path,
             tasks=self.app_id,
@@ -146,15 +149,11 @@ class DMCDataset(BaseTSDataset):
         for f in files:
             file_name = os.path.join(load_path, f)
 
-            data = pd.read_csv(file_name, index_col='t')
-
-            if self.training:
-                target = np.zeros(len(data), dtype=np.int64)
-            else:
-
-                target = data['Anomaly'].to_numpy()
-                target = target != 0
-                target = target.astype(np.int64)
+            data = pd.read_csv(file_name)
+            
+            target = data['Anomaly'].to_numpy()
+            target = target != 0
+            target = target.astype(np.int64)
 
             data = data.drop(columns=['Anomaly'])
 

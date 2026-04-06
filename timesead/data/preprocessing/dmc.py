@@ -104,12 +104,12 @@ def get_stats(
     
     for task in tasks[1:]:
         task_path = os.path.join(path, task.name.lower())
-        with np.load(task_path, 'train_stats_normal.npz') as d:
+        with np.load(os.path.join(task_path, 'train_stats_normal.npz')) as d:
             normal_stats = dict(d)
         final_stats = merge_stats(normal_stats, final_stats)
 
         if not(use_normaly_only):
-            with np.load(task_path, 'train_stats_anomaly.npz') as d:
+            with np.load(os.path.join(task_path, 'train_stats_anomaly.npz')) as d:
                 anomaly_stats = dict(d)
             final_stats = merge_stats(anomaly_stats, final_stats)
     

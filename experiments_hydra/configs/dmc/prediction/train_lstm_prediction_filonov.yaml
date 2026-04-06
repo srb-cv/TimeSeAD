@@ -4,20 +4,20 @@ dataset:
   ds_args:
     training: true
     app_id: [1,11]
-    use_normal_only: false
+    use_normal_only: true
   pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
       args:
-        window_size: 50
+        window_size: 3
         replace_labels: true
   test_pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
       args:
-        window_size: 50
+        window_size: 3
         replace_labels: false
-  use_dataset_pipeline: true
+  use_dataset_pipeline: false
   split: [0.75, 0.25]
   split_axis: time
 

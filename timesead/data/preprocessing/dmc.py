@@ -115,21 +115,12 @@ def get_stats(
     
     return final_stats
     
-def load_preprocessed_features(file: str, is_abnormal: bool):
+def load_preprocessed_features(file: str):
     data = np.load(file)
     data = data['features']
-    
-    if is_abnormal:
-        new_col = np.ones((data.shape[0], 1))
-    else:
-        new_col = np.zeros((data.shape[0], 1))
-
-    data = np.hstack((data, new_col))
-
     df = pd.DataFrame(data)
 
-    column_names = [f"feature_{i}" for i in range(df.shape[1] - 1)]
-    column_names.append("Anomaly")
+    column_names = [f"feature_{i}" for i in range(df.shape[1])]
     df.columns = column_names
     return df
 
@@ -151,9 +142,17 @@ def create_new_dataset_with_label(
     file_length_pairs = []
     for file in files:
         df = load_preprocessed_features(
-            file=file,
-            is_abnormal=is_abnormal
+            file=file
             )
+        
+        if is_training:
+            mean, min, max, n = update_statistics_increment(df, mean, min, max, n)
+        
+        if is_abnormal:
+            new_col = np.ones((df.shape[0], 1))
+        else:
+            new_col = np.zeros((df.shape[0], 1))
+        df["Anomaly"] = new_col
         
         file_name = create_file_name(
             task_name=task_name,
@@ -162,10 +161,8 @@ def create_new_dataset_with_label(
             )
         
         df.to_csv(os.path.join(output_path, file_name), index=False)
-
         file_length_pairs.append((file_name,df.shape[0]))
-        if is_training:
-            mean, min, max, n = update_statistics_increment(df, mean, min, max, n)
+        
     if is_training:
         save_statistic(
             out_data_dir=output_path,

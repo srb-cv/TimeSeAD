@@ -1,10 +1,8 @@
 import functools
 import os
 from typing import Tuple, Optional, Union, Callable, Dict, Any, List
-import tempfile
-import subprocess
-import shutil
 import logging
+import json
 
 import numpy as np
 import pandas as pd
@@ -13,38 +11,12 @@ import torch
 from timesead.data.dataset import BaseTSDataset
 from timesead.data.preprocessing import minmax_scaler
 from timesead.utils.metadata import DATA_DIRECTORY
-from timesead.data.preprocessing.dmc import DMCTask, preprocess_dmc_data, get_stats, obtain_meta_data
+from timesead.data.preprocessing.dmc import DMCTask, construct_meta_data, get_stats, obtain_meta_data, META_DATASET_FILE, parse_meta_data
 
 
 _logger = logging.getLogger(__name__)
 
-TRAIN_FILES = set()
 
-
-TEST_FILES = set()
-
-TRAIN_LENGTHS = {
-    1: [14391, 2690, 3591, 3591, 2728, 14391],
-    2: [28725, 4269, 35923],
-    3: [28790, 28790, 28789, 28791],
-    4: [7191, 28789, 28769, 28790, 28790, 86391],
-    5: [28790, 28790, 28791, 4742, 3590, 28790, 7191, 2727],
-    6: [28757, 28789, 28790, 28790, 3588, 86390, 28790, 53990, 7190, 2634, 2690, 2689],
-    9: [28790, 3345, 86341, 14390, 86391, 53990],
-    10: [14356, 13224, 28790, 28746, 28790, 28790, 35989]
-}
-
-
-TEST_LENGTHS = {
-    1: [2945, 43233, 3632],
-    2: [46791, 2883, 43230, 3631],
-    3: [2482, 2620, 4231, 5937],
-    4: [129591, 3632],
-    5: [43191, 46791, 46810, 2489, 4232, 43230, 3629],
-    6: [46807, 46785, 3629],
-    9: [7506, 46808, 43259, 5938],
-    10: [10284, 46807, 43230, 5930],
-}
 
 class DMCDataset(BaseTSDataset):
     """
@@ -57,7 +29,7 @@ class DMCDataset(BaseTSDataset):
     def __init__(
             self,
             dataset_path: str = os.path.join(DATA_DIRECTORY, 'dmc'),
-            app_id: Union[int, List[int]] = 1,
+            task_id: Union[int, List[int]] = 1, # change name
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
             use_normal_only: bool = True,
@@ -66,7 +38,7 @@ class DMCDataset(BaseTSDataset):
         """
 
         :param dataset_path: Folder from which to load the dataset.
-        :param app_id: Data from which app to load. Must be in [1-6, 9, 10].
+        :param task_id: Data from which app to load. Must be in [1-6, 9, 10].
         :param training: Whether to load the training or the test set.
         :param standardize: Can be either a bool that decides whether to apply the dataset-dependent default
             standardization or a function with signature (dataframe, stats) -> dataframe, where stats is a dictionary of
@@ -75,22 +47,21 @@ class DMCDataset(BaseTSDataset):
         :param preprocess: Whether to setup the dataset for experiments.
         """
 
-        if isinstance(app_id, int):
-            app_id = [app_id]
+        if isinstance(task_id, int):
+            task_id = [task_id]
 
-        self.app_id = []
-        for i in app_id:
+        self.task_id = []
+        for i in task_id:
             if i not in self.task_values:
                 raise ValueError(f'DMC Task must be one of {self.task_values}')
             else:
-                self.app_id.append(DMCTask(i))
+                self.task_id.append(DMCTask(i))
 
         
         
         self.dataset_path = dataset_path
-        self.data_path = os.path.join(dataset_path, 'processed')
-        self.train_data_path = os.path.join(self.data_path, 'train')
-        self.test_data_path = os.path.join(self.data_path, 'test')
+        self.train_dataset_path = os.path.join(self.dataset_path, 'train')
+        self.test_dataset_path = os.path.join(self.dataset_path, 'test')
 
         self.training = training
         self.use_normal_only = use_normal_only
@@ -105,11 +76,9 @@ class DMCDataset(BaseTSDataset):
                                    ' dataset.')
 
             _logger.info("Processed data files not found! Running pre-processing now. This might take several minutes.")
-            preprocess_dmc_data(
-                missing_tasks=missing_tasks,
-                out_data_dir=self.data_path,
-                raw_data_dir=dataset_path
-            )
+        construct_meta_data(
+            missing_tasks = missing_tasks,
+            data_dir = self.dataset_path)
 
         self.inputs = None
         self.targets = None
@@ -117,19 +86,19 @@ class DMCDataset(BaseTSDataset):
         self.intialize_meta_data(standardize=standardize)
 
     def intialize_meta_data(self, standardize):
-    
-        self.train_files, self.train_lengths, self.test_files, self.test_lengths = obtain_meta_data(
-            path=self.data_path,
-            tasks=self.app_id,
+        json_file = os.path.join(self.dataset_path, META_DATASET_FILE)
+        self.train_meta_datas, self.test_meta_datas = obtain_meta_data(
+            json_path=json_file,
+            tasks=self.task_id,
             use_normaly_only=self.use_normal_only,
         )
 
-        assert len(self.train_files) == len(self.train_lengths), "Train files and lengths must have same size."
-        assert len(self.test_files) == len(self.test_lengths), "Test files and lengths must have same size."
+        self.train_files, self.train_lengths, self.train_labels = parse_meta_data(self.train_meta_datas)
+        self.test_files, self.test_lengths, self.test_labels = parse_meta_data(self.test_meta_datas)
 
         stats = get_stats(
-            path=self.train_data_path,
-            tasks=self.app_id,
+            path=self.train_dataset_path,
+            tasks=self.task_id,
             use_normaly_only=self.use_normal_only
         )
         if callable(standardize):
@@ -141,27 +110,30 @@ class DMCDataset(BaseTSDataset):
         
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        load_path = self.train_data_path if self.training else self.test_data_path
+        load_path = self.train_dataset_path if self.training else self.test_dataset_path
 
-        files = self.train_files if self.training else self.test_files
+        files = self.train_meta_datas if self.training else self.test_meta_datas
 
         inputs, targets = [], []
         for f in files:
-            file_name = os.path.join(load_path, f)
+            file_name = f[0]
+            file_label = f[-1]
+            file_name = os.path.join(load_path, file_name)
 
-            data = pd.read_csv(file_name)
+            data = np.load(file_name)['features']
+    
+            if file_label:
+                target = np.ones(data.shape[0])
+            else:
+                target = np.zeros(data.shape[0])
             
-            target = data['Anomaly'].to_numpy()
-            target = target != 0
             target = target.astype(np.int64)
-
-            data = data.drop(columns=['Anomaly'])
 
             if self.standardize_fn is not None:
                 data = self.standardize_fn(data)
             data = data.astype(np.float32)
 
-            input = data.to_numpy()
+            input = data #.to_numpy()
 
             inputs.append(input)
             targets.append(target)
@@ -178,7 +150,7 @@ class DMCDataset(BaseTSDataset):
         return (torch.as_tensor(self.inputs[item]),), (torch.as_tensor(self.targets[item]),)
 
     def __len__(self) -> Optional[int]:
-        return len(self.train_files) if self.training else len(self.test_files)
+        return len(self.train_meta_datas) if self.training else len(self.test_meta_datas)
 
     @property
     def seq_len(self) -> List[int]:
@@ -210,7 +182,7 @@ class DMCDataset(BaseTSDataset):
 
         for data_type in data_types:
             for feature in features:
-                for task in self.app_id:
+                for task in self.task_id:
                     data_folder_path = os.path.join(
                         self.dataset_path,
                         data_type,
@@ -222,18 +194,17 @@ class DMCDataset(BaseTSDataset):
         return True
 
     def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
-        # Only checks if the `processed` folder exsits
-        data_types = ['test', 'train']
-       
+        json_file = os.path.join(self.dataset_path, META_DATASET_FILE)
 
         missing_tasks = []
-        for data_type in data_types:
-            for task in self.app_id:
-                data_folder_path = os.path.join(
-                    self.data_path,
-                    data_type,
-                    task.name.lower()
-                    )
-                if not os.path.isdir(data_folder_path) and task not in missing_tasks:
+        if os.path.exists(json_file):
+            with open(json_file, "r") as f:
+                meta_dict = json.load(f)
+            
+            for task in self.task_id:
+                if not task.name.lower() in meta_dict:
                     missing_tasks.append(task)
+        else:
+            missing_tasks = self.task_id
+            
         return missing_tasks

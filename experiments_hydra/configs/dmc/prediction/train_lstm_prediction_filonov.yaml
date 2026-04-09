@@ -3,7 +3,7 @@ dataset:
   name: DMCDataset
   ds_args:
     training: true
-    task_id: [1,11]
+    task_id: [1, 11]
     use_normal_only: true
   pipeline:
     prediction:

@@ -20,10 +20,14 @@ _logger = logging.getLogger(__name__)
 
 class DMCDataset(BaseTSDataset):
     """
-    To-Do
-    """
-    GITHUB_LINK = 'https://github.com/exathlonbenchmark/exathlon.git'
+    Dataset loader for DMC (DeepMind Control) time series anomaly detection.
 
+    Main goal:
+    - Load raw .npz files
+    - Convert into (input, target) sequences
+    - Apply preprocessing (normalization)
+    - Provide PyTorch-compatible dataset interface
+    """
     task_values = [e.value for e in DMCTask]
 
     def __init__(
@@ -47,9 +51,11 @@ class DMCDataset(BaseTSDataset):
         :param preprocess: Whether to setup the dataset for experiments.
         """
 
+        # ensure task_id is a list
         if isinstance(task_id, int):
             task_id = [task_id]
 
+        # validate task ids
         self.task_id = []
         for i in task_id:
             if i not in self.task_values:
@@ -58,49 +64,73 @@ class DMCDataset(BaseTSDataset):
                 self.task_id.append(DMCTask(i))
 
         
-        
+        # define paths
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
+        self.preprocess_path = os.path.join(self.dataset_path, "preprocess")
 
         self.training = training
         self.use_normal_only = use_normal_only
 
+        # check dataset exists
         if not self._check_exists():
             raise RuntimeError('Dataset not found. You can use download=True to download it.')
         
+        # check which tasks need preprocessing
         missing_tasks = self._search_missing_preprocessed_tasks()
+
+        # run preprocessing if needed
         if len(missing_tasks) > 0:
             if not preprocess:
                 raise RuntimeError('Dataset needs to be processed for proper working. Pass preprocess=True to setup the'
                                    ' dataset.')
 
             _logger.info("Processed data files not found! Running pre-processing now. This might take several minutes.")
-        construct_meta_data(
-            missing_tasks = missing_tasks,
-            data_dir = self.dataset_path)
+            construct_meta_data(
+                missing_tasks = missing_tasks,
+                data_dir = self.dataset_path,
+                save_dir=self.preprocess_path,
+                )
 
+        # placeholders for loaded data
         self.inputs = None
         self.targets = None
 
+        # load metadata + setup normalization
         self.intialize_meta_data(standardize=standardize)
 
     def intialize_meta_data(self, standardize):
-        json_file = os.path.join(self.dataset_path, META_DATASET_FILE)
+        """
+        Load metadata and setup normalization.
+
+        Output:
+        - self.train_meta_datas / test_meta_datas
+        - file paths, sequence lengths, labels
+        - normalization function
+        """
+
+        json_file = os.path.join(self.preprocess_path, META_DATASET_FILE)
+
+        # load metadata for selected tasks
         self.train_meta_datas, self.test_meta_datas = obtain_meta_data(
             json_path=json_file,
             tasks=self.task_id,
             use_normaly_only=self.use_normal_only,
         )
 
+        # extract file paths, lengths, labels
         self.train_files, self.train_lengths, self.train_labels = parse_meta_data(self.train_meta_datas)
         self.test_files, self.test_lengths, self.test_labels = parse_meta_data(self.test_meta_datas)
 
+        # compute dataset statistics (mean, std, etc.)
         stats = get_stats(
-            path=self.train_dataset_path,
+            path=self.preprocess_path,
             tasks=self.task_id,
             use_normaly_only=self.use_normal_only
         )
+
+        # define normalization function
         if callable(standardize):
             self.standardize_fn = functools.partial(standardize, stats=stats)
         elif standardize:
@@ -110,18 +140,28 @@ class DMCDataset(BaseTSDataset):
         
 
     def load_data(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        """
+        Load raw data from disk.
+
+        Output:
+        - inputs: list of arrays (T, F)
+        - targets: list of arrays (T,) with 0 (normal) or 1 (anomaly)
+        """
+
         load_path = self.train_dataset_path if self.training else self.test_dataset_path
 
         files = self.train_meta_datas if self.training else self.test_meta_datas
 
         inputs, targets = [], []
         for f in files:
-            file_name = f[0]
-            file_label = f[-1]
+            file_name = f[0] # filename
+            file_label = f[-1] # anomaly label (bool)
             file_name = os.path.join(load_path, file_name)
 
+            # load features: shape (T, F)
             data = np.load(file_name)['features']
     
+            # create label per timestep
             if file_label:
                 target = np.ones(data.shape[0])
             else:
@@ -129,6 +169,7 @@ class DMCDataset(BaseTSDataset):
             
             target = target.astype(np.int64)
 
+            # apply normalization if needed
             if self.standardize_fn is not None:
                 data = self.standardize_fn(data)
             data = data.astype(np.float32)
@@ -176,6 +217,12 @@ class DMCDataset(BaseTSDataset):
         return column_names
 
     def _check_exists(self) -> bool:
+        """
+        Check dataset folder structure exists.
+
+        Returns:
+        - True if all required folders exist
+        """
         # Only checks if the `data` folder exists
         data_types = ['test', 'train']
         features = ["normal_features", "random_features"]
@@ -194,7 +241,14 @@ class DMCDataset(BaseTSDataset):
         return True
 
     def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
-        json_file = os.path.join(self.dataset_path, META_DATASET_FILE)
+        """
+        Check which tasks are missing metadata.
+
+        Output:
+        - list of tasks that need preprocessing
+        """
+        
+        json_file = os.path.join(self.preprocess_path, META_DATASET_FILE)
 
         missing_tasks = []
         if os.path.exists(json_file):

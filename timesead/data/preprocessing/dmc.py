@@ -15,14 +15,20 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
+# Constants for filenames and labels
 META_DATASET_FILE = "meta_dataset.json"
-STATISTICS_FILE = "train_stats.npz"
-NORMAL_LABEL: bool = False
-ANOMALY_LABEL: bool = True
+NORMAL_STATISTICS_FILE = "train_normal_stats.npz"
+ANOMAL_STATISTICS_FILE = "train_anomaly_stats.npz"
 
+NORMAL_LABEL: bool = False     # normal data label
+ANOMALY_LABEL: bool = True     # anomaly data label
 
 
 class DMCTask(Enum):
+    """
+    Enum representing all DMC tasks.
+    Used to select which environment/task dataset to load.
+    """
     ACROBOT_SWINGUP = 0
     CHEETAH_RUN = 1
     FINGER_TURN_HARD = 2
@@ -41,47 +47,76 @@ class DMCTask(Enum):
     POINTMASS_HARD = 15
     REACHER_EASY = 16
 
-def obtain_meta_data(
-    json_path: str,
-    tasks: List[DMCTask],
-    use_normaly_only: bool,
-):
-    if os.path.exists(json_path):
-        with open(json_path, "r") as f:
-            dict_data = json.load(f)
-    else:
-        raise RuntimeError('Cant find meta_dataset.json in DMC folder.')
-    
+
+def obtain_meta_data(json_path, tasks, use_normaly_only):
+    """
+    Load metadata from JSON file.
+
+    Input:
+    - json_path: path to meta_dataset.json
+    - tasks: list of DMCTask
+    - use_normaly_only: whether to keep only normal samples
+
+    Output:
+    - train_meta_datas: list of (file_path, length, label)
+    - test_meta_datas: same format
+    """
+
+    if not os.path.exists(json_path):
+        raise RuntimeError('Cant find meta_dataset.json')
+
+    with open(json_path, "r") as f:
+        dict_data = json.load(f)
+
     train_meta_datas = []
     test_meta_datas = []
+
     for task in tasks:
         task_name = task.name.lower()
 
+        # load test metadata directly
         test_meta_datas = dict_data[task_name]['test']
-        
 
-        
+        # load train metadata
         temporary_meta_datas = dict_data[task_name]['train']
+
         if use_normaly_only:
+            # filter only normal samples
             for data in temporary_meta_datas:
                 if data[-1] == NORMAL_LABEL:
                     train_meta_datas.append(data)
         else:
             train_meta_datas = temporary_meta_datas
-            
 
     return train_meta_datas, test_meta_datas
 
+
 def parse_meta_data(data):
+    """
+    Split metadata tuples into separate lists.
+
+    Input:
+    - data: list of (file_path, length, label)
+
+    Output:
+    - file_paths, lengths, labels
+    """
     a, b, c = zip(*data)
+    return list(a), list(b), list(c)
 
-    # convert to lists if needed
-    a, b, c = list(a), list(b), list(c)
-
-    return a, b, c
 
 def merge_stats(a, b):
-    # If one is empty → return the other
+    """
+    Merge two statistics dictionaries.
+
+    Each dict contains:
+    - mean, min, max, n (number of samples)
+
+    Output:
+    - combined statistics
+    """
+
+    # handle empty cases
     if a["n"] == 0 or a["mean"] is None:
         return b
     if b["n"] == 0 or b["mean"] is None:
@@ -96,148 +131,208 @@ def merge_stats(a, b):
         "min": np.minimum(a["min"], b["min"]),
     }
 
-def get_stats(
-        path:str,
-        tasks: List[DMCTask],
-        use_normaly_only: bool,
-        ):
-    final_stats = {
-        "mean": None,
-        "max": None,
-        "min": None,
-        "n": 0,
-    }
-    
+
+def get_stats(path, tasks, use_normaly_only):
+    """
+    Load and merge statistics across tasks.
+
+    Input:
+    - path: preprocess directory
+    - tasks: list of tasks
+    - use_normaly_only: include anomaly stats or not
+
+    Output:
+    - final_stats: combined statistics dict
+    """
+
+    final_stats = {"mean": None, "max": None, "min": None, "n": 0}
+
     for task in tasks:
         task_name = task.name.lower()
-        normal_task_path = os.path.join(path,"normal_features",task_name)
-        with np.load(os.path.join(normal_task_path, STATISTICS_FILE)) as d:
+        task_path = os.path.join(path, task_name)
+
+        # load normal stats
+        with np.load(os.path.join(task_path, NORMAL_STATISTICS_FILE)) as d:
             normal_stats = dict(d)
+
         final_stats = merge_stats(normal_stats, final_stats)
 
-        if not(use_normaly_only):
-            anomaly_task_path = os.path.join(path,"random_features", task_name)
-            with np.load(os.path.join(anomaly_task_path, STATISTICS_FILE)) as d:
+        # optionally include anomaly stats
+        if not use_normaly_only:
+            with np.load(os.path.join(task_path, ANOMAL_STATISTICS_FILE)) as d:
                 anomaly_stats = dict(d)
-            final_stats = merge_stats(anomaly_stats, final_stats)
-    
-    return final_stats
-    
-def load_features(file: str):
-    data = np.load(file)
-    data = data['features']
-    df = pd.DataFrame(data)
-    return df
 
-def create_file_name(task_name: str, is_abnormal: bool, num_features: int):
+            final_stats = merge_stats(anomaly_stats, final_stats)
+
+    return final_stats
+
+
+def load_features(file):
+    """
+    Load .npz file and return as DataFrame.
+
+    Output:
+    - DataFrame shape (T, F)
+    """
+    data = np.load(file)['features']
+    return pd.DataFrame(data)
+
+
+def create_file_name(task_name, is_abnormal, num_features):
+    """
+    Generate unique filename.
+
+    Format:
+    [label]_[task]_[features]_[timestamp].csv
+    """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     return f"{int(is_abnormal)}_{task_name}_{num_features}f_{ts}.csv"
 
-def obtain_data_length_and_save_data_statistics(
-        data_path: str,
-        is_training: bool,
-        is_anomaly: bool,
-        ):
+
+def obtain_data_length_and_data_statistics(data_path, is_anomaly):
+    """
+    Process all files in a folder.
+
+    Input:
+    - data_path: directory of .npz files
+    - is_anomaly: label for all files
+
+    Output:
+    - file_length_pairs: [(file_path, length, label)]
+    - stats: (mean, min, max, n)
+    """
 
     files = glob.glob(os.path.join(data_path, "*.npz"))
+
     mean, min, max, n = None, None, None, 0
-
     file_length_pairs = []
+
     for file in files:
-        df = load_features(file=file)
-        
-        if is_training:
-            mean, min, max, n = update_statistics_increment(df, mean, min, max, n)
-        
+        df = load_features(file)
+
+        # update running statistics
+        mean, min, max, n = update_statistics_increment(df, mean, min, max, n)
+
+        # store relative path + length + label
         p = Path(file)
-        file_length_pairs.append((str(Path(*p.parts[-3:])),df.shape[0],is_anomaly))
-        
-    if is_training:
-        save_statistic(
-            out_data_dir=data_path,
-            max=max,
-            mean=mean,
-            min=min,
-            n=n,
+        file_length_pairs.append(
+            (str(Path(*p.parts[-3:])), df.shape[0], is_anomaly)
         )
-    return file_length_pairs
 
-def get_directories_of_raw_data(raw_data_dir: str, task_name: str):
-    normal_train_dir = os.path.join(raw_data_dir, 'train', "normal_features",task_name)
-    anomaly_train_dir = os.path.join(raw_data_dir, 'train', "random_features",task_name)
+    return file_length_pairs, (mean, min, max, n)
 
-    normal_test_dir = os.path.join(raw_data_dir, 'test', "normal_features",task_name)
-    anomaly_test_dir = os.path.join(raw_data_dir, 'test', "random_features",task_name)
 
-    return (normal_train_dir, anomaly_train_dir, normal_test_dir, anomaly_test_dir)
+def get_directories_of_raw_data(raw_data_dir, task_name):
+    """
+    Get all relevant directories for a task.
 
-def save_statistic(
-        out_data_dir: str,
-        mean: np.ndarray,
-        max: np.ndarray,
-        min: np.ndarray,
-        n: int):
-    stats_file = os.path.join(out_data_dir, STATISTICS_FILE)
-    np.savez(stats_file, mean=mean, min=min, max=max, n=n)
+    Output:
+    - normal_train_dir
+    - anomaly_train_dir
+    - normal_test_dir
+    - anomaly_test_dir
+    """
 
-def construct_json(
-        train_length_pairs: List[tuple[str,int]],
-        test_length_pairs: List[tuple[str,int]],
-        ):
-    data = {
+    return (
+        os.path.join(raw_data_dir, 'train', "normal_features", task_name),
+        os.path.join(raw_data_dir, 'train', "random_features", task_name),
+        os.path.join(raw_data_dir, 'test', "normal_features", task_name),
+        os.path.join(raw_data_dir, 'test', "random_features", task_name),
+    )
+
+
+def construct_json(train_length_pairs, test_length_pairs):
+    """
+    Build JSON structure for one task.
+
+    Output:
+    {
+        "train": [...],
+        "test": [...]
+    }
+    """
+    return {
         "train": train_length_pairs,
         "test": test_length_pairs,
     }
-    return data
 
-def construct_meta_data(
-        missing_tasks: List[DMCTask],
-        data_dir: str
-        ):
-    json_file = os.path.join(data_dir, META_DATASET_FILE)
+
+def construct_meta_data(missing_tasks, data_dir, save_dir):
+    """
+    Main preprocessing function.
+
+    Goal:
+    - Scan raw dataset
+    - Compute statistics
+    - Build metadata JSON
+    - Save everything to disk
+
+    Steps per task:
+    1. Locate raw data folders
+    2. Compute stats for normal + anomaly
+    3. Save stats (.npz)
+    4. Build metadata (file paths, lengths, labels)
+    5. Save to JSON
+    """
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    json_file = os.path.join(save_dir, META_DATASET_FILE)
+
+    # load existing metadata if exists
     if os.path.exists(json_file):
         with open(json_file, "r") as f:
             datas = json.load(f)
     else:
         datas = {}
-    
+
     for task in missing_tasks:
         task_name = task.name.lower()
 
-        normal_train, anomaly_train, normal_test, anomaly_test = get_directories_of_raw_data(
-            raw_data_dir=data_dir, 
-            task_name=task_name
-            )
+        # get all directories
+        normal_train, anomaly_train, normal_test, anomaly_test = \
+            get_directories_of_raw_data(data_dir, task_name)
 
-        train_length_pairs = obtain_data_length_and_save_data_statistics(
-                data_path = normal_train,
-                is_training = True,
-                is_anomaly=False
-                )
-        
-        train_length_pairs += obtain_data_length_and_save_data_statistics(
-                data_path = anomaly_train,
-                is_training = True,
-                is_anomaly=True
-                )
-        
-        test_length_pairs = obtain_data_length_and_save_data_statistics(
-                data_path = normal_test,
-                is_training = False,
-                is_anomaly=False
-                )
-        
-        test_length_pairs += obtain_data_length_and_save_data_statistics(
-                data_path = anomaly_test,
-                is_training = False,
-                is_anomaly=True
-                )
+        task_path = os.path.join(save_dir, task_name)
+        os.makedirs(task_path, exist_ok=True)
 
-        data = construct_json(
-            train_length_pairs=train_length_pairs,
-            test_length_pairs=test_length_pairs,
-        ) 
-        datas[task_name] = data
-    
+        # ---- TRAIN NORMAL ----
+        train_length_pairs, stats = obtain_data_length_and_data_statistics(
+            normal_train, is_anomaly=False
+        )
+
+        mean, min, max, n = stats
+        np.savez(os.path.join(task_path, NORMAL_STATISTICS_FILE),
+                 mean=mean, min=min, max=max, n=n)
+
+        # ---- TRAIN ANOMALY ----
+        temp_pairs, stats = obtain_data_length_and_data_statistics(
+            anomaly_train, is_anomaly=True
+        )
+
+        mean, min, max, n = stats
+        np.savez(os.path.join(task_path, ANOMAL_STATISTICS_FILE),
+                 mean=mean, min=min, max=max, n=n)
+
+        train_length_pairs += temp_pairs
+
+        # ---- TEST DATA ----
+        test_length_pairs, _ = obtain_data_length_and_data_statistics(
+            normal_test, is_anomaly=False
+        )
+
+        temp_pairs, _ = obtain_data_length_and_data_statistics(
+            anomaly_test, is_anomaly=True
+        )
+
+        test_length_pairs += temp_pairs
+
+        # build JSON entry
+        datas[task_name] = construct_json(
+            train_length_pairs,
+            test_length_pairs
+        )
+
+    # save final metadata file
     with open(json_file, "w") as f:
         json.dump(datas, f, indent=4)

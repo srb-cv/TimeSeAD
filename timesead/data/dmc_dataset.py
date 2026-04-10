@@ -68,7 +68,7 @@ class DMCDataset(BaseTSDataset):
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
-        self.preprocess_path = os.path.join(self.dataset_path, "preprocess")
+        self.preprocess_path = os.path.join(os.getcwd(), "mlruns_hydra/preprocess")
 
         self.training = training
         self.use_normal_only = use_normal_only

@@ -12,7 +12,7 @@ from mlflow.tracking import MlflowClient
 
 from timesead.utils.metadata import PROJECT_ROOT
 
-from .utils.sweep_adapter import (
+from experiments_hydra.utils.sweep_adapter import (
     EXPERIMENT_MODULE_MAP,
     build_hydra_overrides,
     format_hydra_override_strings,

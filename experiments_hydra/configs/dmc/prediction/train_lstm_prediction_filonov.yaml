@@ -4,13 +4,13 @@ dataset:
   ds_args:
     training: true
     task_id: [1]
-    use_normal_only: true
+    use_normal_only: false
   pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
       args:
         window_size: 3
-        replace_labels: true
+        replace_labels: false
   test_pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
@@ -44,6 +44,7 @@ training:
   checkpoint_interval: 15
   deterministic: false
   seed: 0
+  supervised: true
 
 model:
   lstm_hidden_dims: [30, 20]

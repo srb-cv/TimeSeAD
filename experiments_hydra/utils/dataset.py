@@ -3,6 +3,7 @@ import copy
 from typing import Any, Dict, List, Tuple
 
 import torch
+from torch.utils.data import Sampler
 
 from timesead.data.dataset import collate_fn
 from timesead.data.transforms import PipelineDataset, make_dataset_split, make_pipe_from_dict
@@ -54,13 +55,33 @@ def load_dataset(
     return result
 
 
-def get_dataloader(dataset, training_cfg):
+def get_dataloader(dataset, training_cfg, sampler:Sampler=None):
     training_cfg = to_plain_config(training_cfg)
-    return torch.utils.data.DataLoader(
-        dataset,
-        batch_size=training_cfg["batch_size"],
-        num_workers=training_cfg["num_workers"],
-        shuffle=training_cfg.get("shuffle", True),
-        collate_fn=collate_fn(training_cfg["batch_dim"]),
-        drop_last=training_cfg["drop_last"],
-    )
+    dataloader = None
+
+    if sampler != None:
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_sampler=sampler,   # 👈 replace batch_size + shuffle
+            num_workers=training_cfg["num_workers"],
+            collate_fn=collate_fn(training_cfg["batch_dim"]),
+        )
+    else:
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=training_cfg["batch_size"],
+            num_workers=training_cfg["num_workers"],
+            shuffle=training_cfg.get("shuffle", True),
+            collate_fn=collate_fn(training_cfg["batch_dim"]),
+            drop_last=training_cfg["drop_last"],
+        )
+        
+    return dataloader
+
+def get_data_labels(dataset: PipelineDataset):
+    labels = []
+    for _, targets in dataset:
+        label = targets[0].max().item()
+        labels.append(label)
+
+    return labels

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Type, Union
 
 import torch
+from torch.utils.data import Sampler
 
 from timesead.optim.loss import Loss, TorchLossWrapper
 from timesead.optim.trainer import CheckpointHook, EarlyStoppingHook
@@ -10,9 +11,11 @@ from timesead.optim.trainer import Trainer
 from timesead.utils.rng_utils import set_seed
 from timesead.utils.torch_utils import run_deterministic, run_fast
 from timesead.utils.utils import objspec2constructor
+from timesead.data.sampler import BalancedBatchSampler
 
 from .config import to_plain_config
 from .dataset import get_dataloader
+from experiments_hydra.utils import get_data_labels
 
 
 def instantiate_loss(
@@ -30,7 +33,7 @@ def instantiate_loss(
     return loss
 
 
-def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, seed: int = 0):
+def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, seed: int = 0, sampler: Sampler = None):
     training_cfg = to_plain_config(training_cfg)
     set_seed(seed)
 
@@ -39,7 +42,17 @@ def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, 
     else:
         run_fast()
 
-    train_loader = get_dataloader(train_ds, {**training_cfg, "shuffle": True})
+    sampler = None
+    if "supervised" in training_cfg and training_cfg["supervised"]:
+        labels = get_data_labels(
+            dataset=train_ds,
+        )
+        sampler = BalancedBatchSampler(
+            labels=labels,
+            batch_size=training_cfg["batch_size"]
+        )
+
+    train_loader = get_dataloader(train_ds, {**training_cfg, "shuffle": True},sampler)
     val_loader = get_dataloader(val_ds, {**training_cfg, "shuffle": False})
 
     optimizer = objspec2constructor(training_cfg["optimizer"])

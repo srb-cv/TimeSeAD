@@ -32,7 +32,16 @@ def run(cfg):
             linear_activation=str2cls(cfg.model.linear_activation),
             dropout=cfg.model.dropout,
         )
-        trainer = train_model(model, train_ds, val_ds, cfg.training, output_dir, logger, seed=cfg.training.seed)
+            
+        trainer = train_model(
+            model,
+            train_ds,
+            val_ds,
+            cfg.training,
+            output_dir,
+            logger,
+            seed=cfg.training.seed,
+            )
         model = load_best_model_if_available(trainer, model, cfg.training.epochs)
 
         detector = None

@@ -126,7 +126,9 @@ class Evaluator:
         else:
             area = auc(recall, precision)
 
-        return area.item(), {}
+        # sklearn.metrics.auc returns a Python float, while numpy reductions return numpy scalars.
+        # Use float(...) to normalize both cases.
+        return float(area), {}
 
     def average_precision(self, labels: torch.Tensor, scores: torch.Tensor) -> Tuple[float, Dict[str, Any]]:
         r"""
@@ -197,7 +199,9 @@ class Evaluator:
         else:
             area = auc(recall.numpy(), precision.numpy())
 
-        return area.item(), {}
+        if isinstance(area, torch.Tensor):
+            return float(area.item()), {}
+        return float(area), {}
 
     def ts_average_precision(self, labels: torch.Tensor, scores: torch.Tensor, weighted_precision: bool = True) \
             -> Tuple[float, Dict[str, Any]]:

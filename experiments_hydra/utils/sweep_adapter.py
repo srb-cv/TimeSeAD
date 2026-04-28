@@ -83,22 +83,45 @@ def _flatten_overrides(obj: Dict[str, Any], prefix: str = "") -> Iterator[Tuple[
             yield full_key, value
 
 
-def build_hydra_overrides(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_grid_points(grid: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return list(param_grid_to_list_of_dicts(grid)) or [{}]
+
+
+def build_training_hydra_overrides(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     updates = _remap_sections(copy.deepcopy(spec.get("training_param_updates", {})))
     training_grid = _remap_sections(copy.deepcopy(spec.get("training_param_grid", {})))
-    detector_grid = _remap_sections(copy.deepcopy(spec.get("detector_param_grid", {})))
 
-    training_points = list(param_grid_to_list_of_dicts(training_grid)) or [{}]
-    detector_points = list(param_grid_to_list_of_dicts(detector_grid)) or [{}]
-
-    points: List[Dict[str, Any]] = []
-    for train_point, detector_point in itertools.product(training_points, detector_points):
+    training_points: List[Dict[str, Any]] = []
+    for train_point in _build_grid_points(training_grid):
         merged = copy.deepcopy(updates)
         _recursive_update(merged, train_point)
+        training_points.append(merged)
+
+    return training_points
+
+
+def build_detector_hydra_overrides(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    detector_grid = _remap_sections(copy.deepcopy(spec.get("detector_param_grid", {})))
+    return _build_grid_points(detector_grid)
+
+
+def combine_hydra_override_sets(
+    training_points: List[Dict[str, Any]],
+    detector_points: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    points: List[Dict[str, Any]] = []
+    for train_point, detector_point in itertools.product(training_points, detector_points):
+        merged = copy.deepcopy(train_point)
         _recursive_update(merged, detector_point)
         points.append(merged)
 
     return points
+
+
+def build_hydra_overrides(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    training_points = build_training_hydra_overrides(spec)
+    detector_points = build_detector_hydra_overrides(spec)
+    return combine_hydra_override_sets(training_points, detector_points)
 
 
 def format_hydra_override_strings(point: Dict[str, Any], extra_overrides: Iterable[str] = ()) -> List[str]:

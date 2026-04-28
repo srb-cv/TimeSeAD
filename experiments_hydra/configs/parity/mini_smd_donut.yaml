@@ -1,14 +1,15 @@
 # @package _global_
 dataset:
-  name: SMDDataset
+  name: MiniSMDDataset
   ds_args:
     training: true
     server_id: 0
+    path: /home/varshney/magus/projects/TimeSeAD/data/mini_smd
   pipeline:
     window:
       class: WindowTransform
       args:
-        window_size: 12
+        window_size: 10
     reconstruction:
       class: ReconstructionTargetTransform
       args:
@@ -17,7 +18,7 @@ dataset:
     window:
       class: WindowTransform
       args:
-        window_size: 12
+        window_size: 10
   use_dataset_pipeline: true
   split: [0.75, 0.25]
   split_axis: time
@@ -25,7 +26,8 @@ dataset:
 training:
   optimizer:
     class: torch.optim.Adam
-    args: {}
+    args:
+      lr: 0.001
   batch_size: 128
   batch_dim: 0
   num_workers: 0
@@ -35,9 +37,9 @@ training:
     args:
       milestones: [20]
       gamma: 0.1
-  epochs: 70
+  epochs: 1
   device: cpu
-  loss: torch.nn.MSELoss
+  loss: timesead.models.generative.donut.MaskedVAELoss
   trainer: timesead.optim.trainer.Trainer
   trainer_hooks:
     - event: post_validation
@@ -47,43 +49,59 @@ training:
   seed: 0
 
 model:
-  z_size: 40
+  hidden_dims: [16]
+  latent_dim: 4
+  mask_prob: 0.01
+
+detector:
+  num_mc_samples: 2
 
 experiment:
-  name: smd.reconstruction.train_dense_ae
-  family: reconstruction
-  entrypoint: experiments_hydra.reconstruction.train_dense_ae
+  name: parity.mini_smd.vae.train_donut
+  family: generative
+  entrypoint: experiments_hydra.generative.vae.train_donut
   mlflow_experiment_name: TimeSeAD-Hydra
   tracking_uri: null
   train_detector: true
   evaluate_after_training: false
   tags:
     pilot: "true"
-    dataset_family: smd
 
 sweep:
-  selection_metric: val_loss_0
-  validation_metric: best_ts_f1_score
+  selection_metric: best_f1_score
+  validation_metric: best_f1_score
   evaluation_metrics:
-    - best_ts_f1_score
-    - ts_auprc
-    - best_ts_f1_score_classic
-    - ts_auprc_unweighted
     - best_f1_score
     - auprc
-  mode: min
+  mode: max
   training_param_updates:
+    dataset:
+      name: MiniSMDDataset
+      ds_args:
+        server_id: 0
+        path: /home/varshney/magus/projects/TimeSeAD/data/mini_smd
     training:
-      epochs: 100
+      epochs: 1
+      optimizer:
+        args:
+          lr: 0.001
   training_param_grid:
     model:
-      z_size: [20, 30, 40, 50]
+      hidden_dims:
+        - [16]
+      latent_dim:
+        - 4
+        - 8
+      mask_prob:
+        - 0.01
     dataset:
       pipeline:
         window:
           args:
-            window_size: [10, 25, 50, 75, 100, 150]
-    training:
-      optimizer:
-        args:
-          lr: [1.0e-4, 1.0e-3, 1.0e-2]
+            window_size:
+              - 10
+  detector_param_grid:
+    detector:
+      num_mc_samples:
+        - 2
+        - 4

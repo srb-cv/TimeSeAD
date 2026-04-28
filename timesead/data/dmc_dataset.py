@@ -37,7 +37,9 @@ class DMCDataset(BaseTSDataset):
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
             use_normal_only: bool = True,
-            preprocess: bool = True
+            preprocess: bool = True,
+            shuffle_test_files: bool = False,
+            shuffle_seed: int = 0,
             ):
         """
 
@@ -72,6 +74,8 @@ class DMCDataset(BaseTSDataset):
 
         self.training = training
         self.use_normal_only = use_normal_only
+        self.shuffle_test_files = shuffle_test_files
+        self.shuffle_seed = shuffle_seed
 
         # check dataset exists
         if not self._check_exists():
@@ -117,6 +121,8 @@ class DMCDataset(BaseTSDataset):
             json_path=json_file,
             tasks=self.task_id,
             use_normaly_only=self.use_normal_only,
+            shuffle_test_files=self.shuffle_test_files,
+            shuffle_seed=self.shuffle_seed,
         )
 
         # extract file paths, lengths, labels

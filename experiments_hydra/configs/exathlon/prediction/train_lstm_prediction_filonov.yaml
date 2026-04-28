@@ -57,6 +57,15 @@ experiment:
   mlflow_experiment_name: TimeSeAD-Hydra
   tracking_uri: null
   train_detector: true
+  evaluate_after_training: true
+  post_train_evaluation:
+    protocol: holdout_calibration
+    split: [0.3, 0.7]
+    tune_split_index: 0
+    eval_split_index: 1
+    threshold_metric: ${sweep.validation_metric}
+    fit_detector_on: training_validation
+    metric_names: ${sweep.evaluation_metrics}
   tags:
     pilot: "true"
 

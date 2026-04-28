@@ -1,9 +1,14 @@
 run_dir: outputs/2026-03-25/22-42-39
 run_id: null
 tracking_uri: null
+protocol: single_split
 split: null
 split_axis: null
 split_index: null
+tune_split_index: 0
+eval_split_index: 1
+threshold_metric: null
+fit_detector_on: training_validation
 metric_names: null
 artifact_name: evaluation_summary.json
 log_to_mlflow: true

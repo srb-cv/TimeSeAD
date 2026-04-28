@@ -1,11 +1,20 @@
 sweep:
-  experiment_config: null
-  config_path: "/home/cor54gyp/TimeSeAD/experiment_configs/dmc/prediction/train_lstm_prediction_filonov_on_dmc.yml"
+  experiment_config: "dmc/prediction/train_lstm_prediction_filonov"
+  config_path: null
+  training_param_updates: null
+  training_param_grid: null
+  detector_param_grid: null
   selection_metric: null
-  mode: min
-  max_runs: null
+  mode: null
+  evaluation_metrics: null
+  max_runs: 5
   output_dir: null
   tracking_uri: null
   extra_overrides: []
+  resume_trained_runs_from: null
+  test_folds: 5
+  padding: 1
+  split_axis_override: null
   fail_on_missing_metric: true
   run_evaluation: true
+  run_final_selection: true

@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import glob
+import random
 from typing import List
 from datetime import datetime
 
@@ -48,7 +49,14 @@ class DMCTask(Enum):
     REACHER_EASY = 16
 
 
-def obtain_meta_data(json_path, tasks, use_normaly_only):
+def obtain_meta_data(
+    json_path,
+    tasks,
+    use_normaly_only,
+    *,
+    shuffle_test_files: bool = False,
+    shuffle_seed: int = 0,
+):
     """
     Load metadata from JSON file.
 
@@ -56,6 +64,8 @@ def obtain_meta_data(json_path, tasks, use_normaly_only):
     - json_path: path to meta_dataset.json
     - tasks: list of DMCTask
     - use_normaly_only: whether to keep only normal samples
+    - shuffle_test_files: whether to deterministically shuffle the test file order
+    - shuffle_seed: seed used for deterministic shuffling
 
     Output:
     - train_meta_datas: list of (file_path, length, label)
@@ -75,7 +85,7 @@ def obtain_meta_data(json_path, tasks, use_normaly_only):
         task_name = task.name.lower()
 
         # load test metadata directly
-        test_meta_datas = dict_data[task_name]['test']
+        test_meta_datas = list(dict_data[task_name]['test'])
 
         # load train metadata
         temporary_meta_datas = dict_data[task_name]['train']
@@ -87,6 +97,10 @@ def obtain_meta_data(json_path, tasks, use_normaly_only):
                     train_meta_datas.append(data)
         else:
             train_meta_datas = temporary_meta_datas
+
+    if shuffle_test_files and test_meta_datas:
+        rng = random.Random(shuffle_seed)
+        rng.shuffle(test_meta_datas)
 
     return train_meta_datas, test_meta_datas
 

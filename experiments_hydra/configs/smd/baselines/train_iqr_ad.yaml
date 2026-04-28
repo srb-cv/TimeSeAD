@@ -36,6 +36,7 @@ experiment:
   mlflow_experiment_name: TimeSeAD-Hydra
   tracking_uri: null
   train_detector: true
+  evaluate_after_training: false
   tags:
     pilot: "true"
 

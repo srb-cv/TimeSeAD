@@ -3,6 +3,7 @@ from hydra.core.hydra_config import HydraConfig
 
 from timesead.models.baselines import IQRAnomalyDetector
 from experiments_hydra.utils.config import to_plain_config
+from experiments_hydra.utils.post_training import maybe_evaluate_after_training
 
 from experiments_hydra.utils import (
     get_dataloader,
@@ -17,7 +18,7 @@ from experiments_hydra.utils import (
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
 
-    with start_mlflow_run(cfg):
+    with start_mlflow_run(cfg, output_dir=output_dir):
         save_active_run_id(output_dir)
         _, val_ds = load_dataset(**to_plain_config(cfg.dataset))
         val_loader = get_dataloader(val_ds, {**to_plain_config(cfg.training), "shuffle": False})
@@ -34,6 +35,7 @@ def run(cfg):
             detector.fit(val_loader)
 
         save_final_artifact({"model": None, "detector": detector}, output_dir)
+        maybe_evaluate_after_training(cfg, output_dir)
         return {"model": None, "detector": detector}
 
 

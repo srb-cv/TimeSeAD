@@ -4,6 +4,7 @@ from hydra.core.hydra_config import HydraConfig
 from timesead.models.common import MSEReconstructionAnomalyDetector
 from timesead.models.reconstruction import BasicAE
 from experiments_hydra.utils.config import to_plain_config
+from experiments_hydra.utils.post_training import maybe_evaluate_after_training
 
 from experiments_hydra.utils import (
     load_best_model_if_available,
@@ -19,7 +20,7 @@ from experiments_hydra.utils import (
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
 
-    with start_mlflow_run(cfg) as logger:
+    with start_mlflow_run(cfg, output_dir=output_dir) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))
         model = BasicAE(train_ds.num_features * train_ds.seq_len, cfg.model.z_size * train_ds.seq_len)
@@ -30,6 +31,7 @@ def run(cfg):
             detector = MSEReconstructionAnomalyDetector(model, batch_first=True).to(cfg.training.device)
 
         save_final_artifact({"model": model, "detector": detector}, output_dir)
+        maybe_evaluate_after_training(cfg, output_dir)
         return {"model": model, "detector": detector}
 
 

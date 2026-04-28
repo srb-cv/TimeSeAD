@@ -5,17 +5,19 @@ dataset:
     training: true
     task_id: [1]
     use_normal_only: true
+    shuffle_test_files: true
+    shuffle_seed: 0
   pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
       args:
-        window_size: 3
+        window_size: 16
         replace_labels: true
   test_pipeline:
     prediction:
       class: timesead.models.prediction.LSTMS2STargetTransform
       args:
-        window_size: 3
+        window_size: 16
         replace_labels: false
   use_dataset_pipeline: false
   split: [0.75, 0.25]
@@ -34,8 +36,8 @@ training:
     args:
       milestones: [20]
       gamma: 0.1
-  epochs: 70
-  device: cpu
+  epochs: 3
+  device: cuda
   loss: torch.nn.MSELoss
   trainer: timesead.optim.trainer.Trainer
   trainer_hooks:
@@ -52,12 +54,21 @@ model:
   dropout: 0.0
 
 experiment:
-  name: exathlon.prediction.train_lstm_prediction_filonov
+  name: exathlon.prediction.train_lstm_prediction_filonov_grid_search_7
   family: prediction
   entrypoint: experiments_hydra.prediction.train_lstm_prediction_filonov
   mlflow_experiment_name: TimeSeAD-Hydra
   tracking_uri: null
   train_detector: true
+  evaluate_after_training: true
+  post_train_evaluation:
+    protocol: holdout_calibration
+    split: [0.3, 0.7]
+    tune_split_index: 0
+    eval_split_index: 1
+    threshold_metric: ${sweep.validation_metric}
+    fit_detector_on: training_validation
+    metric_names: ${sweep.evaluation_metrics}
   tags:
     pilot: "true"
 
@@ -76,36 +87,31 @@ sweep:
     dataset:
       name: DMCDataset
     training:
-      epochs: 100
+      epochs: 2
   training_param_grid:
     model:
       lstm_hidden_dims:
         - [30, 20]
         - [50, 30]
         - [50, 30, 20]
-        - [50, 50, 50]
       linear_hidden_layers:
         - []
         - [40]
         - [30, 30]
-        - [30, 30, 30]
       dropout:
         - 0.0
         - 0.15
-        - 0.2
     dataset:
       pipeline:
         prediction:
           args:
             window_size:
-              - 10
-              - 50
-              - 75
-              - 100
+              - 16
+              - 32
+              - 64
     training:
       optimizer:
         args:
           lr:
             - 1.0e-4
             - 1.0e-3
-            - 1.0e-2

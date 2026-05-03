@@ -14,12 +14,61 @@ from typing import Tuple, Optional
 import warnings
 import importlib
 from torch import Tensor
+from torch.nn import functional as F
 import math
+import random
 
 def _instantiate_class(module_name: str, class_name: str):
     module = importlib.import_module(module_name)
     class_ = getattr(module, class_name)
     return class_()
+
+class DSADLoss(torch.nn.Module):
+    """
+
+    Parameters
+    ----------
+    c: torch.Tensor
+        Center of the pre-defined hyper-sphere in the representation space
+
+    reduction: str, optional (default='mean')
+        choice = [``'none'`` | ``'mean'`` | ``'sum'``]
+            - If ``'none'``: no reduction will be applied;
+            - If ``'mean'``: the sum of the output will be divided by the number of
+            elements in the output;
+            - If ``'sum'``: the output will be summed
+
+    """
+
+    def __init__(self, c, eta=1.0, eps=1e-6, reduction='mean'):
+        super(DSADLoss, self).__init__()
+        self.c = c
+        self.reduction = reduction
+        self.eta = eta
+        self.eps = eps
+
+    def forward(self, rep, semi_targets=None, reduction=None):
+        #TODO: preprocess label of inputs
+        # known_anom_id = np.where(y == 1)
+        # y = np.zeros_like(y)
+        # y[known_anom_id] = -1
+        dist = torch.sum((rep - self.c) ** 2, dim=1)
+
+        if semi_targets is not None:
+            loss = torch.where(semi_targets == 0, dist,
+                               self.eta * ((dist+self.eps) ** semi_targets.float()))
+        else:
+            loss = dist
+
+        if reduction is None:
+            reduction = self.reduction
+
+        if reduction == 'mean':
+            return torch.mean(loss)
+        elif reduction == 'sum':
+            return torch.sum(loss)
+        elif reduction == 'none':
+            return loss
 
 class TokenEmbedding(torch.nn.Module):
     def __init__(self, n_features, d_model, kernel_size=3, bias=True):
@@ -170,8 +219,11 @@ class TransformerEncoderLayer(torch.nn.Module):
             state['activation'] = F.relu
         super(TransformerEncoderLayer, self).__setstate__(state)
 
-    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None,
-                src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(self,
+                src: Tensor,
+                src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None,
+                is_causal: bool = False) -> Tensor:
         r"""Pass the input through the encoder layer.
 
         Args:
@@ -340,21 +392,46 @@ class DeepSADTS(BaseModel):
 
     """
 
-    def __init__(self, epochs=100, batch_size=64, lr=1e-3,
-                 network='TCN', seq_len=100, stride=1,
-                 rep_dim=128, hidden_dims='100,50', act='ReLU', bias=False,
-                 n_heads=8, d_model=512, attn='self_attn', pos_encoding='fixed', norm='LayerNorm',
-                 epoch_steps=-1, prt_steps=10, device='cuda',
-                 verbose=2, random_state=42):
+    def __init__(self,
+                 train_loader,
+                 epochs=100,
+                 batch_size=64,
+                 lr=1e-3,
+                 seq_len=100,
+                 stride=1,
+                 rep_dim=128,
+                 hidden_dims='100,50',
+                 act='ReLU',
+                 bias=False,
+                 n_heads=8,
+                 d_model=512,
+                 attn='self_attn',
+                 pos_encoding='fixed',
+                 norm='LayerNorm',
+                 epoch_steps=-1,
+                 prt_steps=10,
+                 device='cuda',
+                 verbose=2,
+                 random_state=42):
         """
         Initializes the DeepSADTS model with the provided parameters.
         """
-        
+        super(DeepSADTS, self).__init__()
+
         self._initialize_base_hyperparamters(
-            data_type='ts', model_name='DeepSAD', epochs=epochs, batch_size=batch_size, lr=lr,
-            network=network, seq_len=seq_len, stride=stride,
-            epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
-            verbose=verbose, random_state=random_state
+            model_name='DeepSAD',
+            n_features=train_loader.num_features,
+            n_samples=len(train_loader),
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            seq_len=seq_len,
+            stride=stride,
+            epoch_steps=epoch_steps,
+            prt_steps=prt_steps,
+            device=device,
+            verbose=verbose,
+            random_state=random_state
         )
 
         self.hidden_dims = hidden_dims
@@ -378,31 +455,38 @@ class DeepSADTS(BaseModel):
             'activation': self.act,
             'bias': self.bias
         }
-        if self.network == 'Transformer':
-            network_params['n_heads'] = self.n_heads
-            network_params['d_model'] = self.d_model
-            network_params['pos_encoding'] = self.pos_encoding
-            network_params['norm'] = self.norm
-            network_params['attn'] = self.attn
-            network_params['seq_len'] = self.seq_len
+        network_params['n_heads'] = self.n_heads
+        network_params['d_model'] = self.d_model
+        network_params['pos_encoding'] = self.pos_encoding
+        network_params['norm'] = self.norm
+        network_params['attn'] = self.attn
+        network_params['seq_len'] = self.seq_len
 
         self._initialize_architecture(**network_params)
 
-        self.c = self._set_c(net, train_loader)
+        self.c = self._set_c(train_loader)
         self.criterion = DSADLoss(c=self.c)
 
-        return
+        return self.c
     
-    def _initialize_base_hyperparamters(self,model_name, data_type='tabular', network='MLP',
-                 epochs=100, batch_size=64, lr=1e-3,
-                 n_ensemble=1, seq_len=100, stride=1,
-                 epoch_steps=-1, prt_steps=10,
-                 device='cuda', contamination=0.1,
-                 verbose=1, random_state=42):
+    def _initialize_base_hyperparamters(
+            self,
+            model_name,
+            n_features,
+            n_samples,
+            epochs=100,
+            batch_size=64,
+            lr=1e-3,
+            n_ensemble=1,
+            seq_len=100,
+            stride=1,
+            epoch_steps=-1,
+            prt_steps=10,
+            device='cuda',
+            contamination=0.1,
+            verbose=1,
+            random_state=42):
         self.model_name = model_name
-
-        self.data_type = data_type
-        self.network = network
 
         # if data_type == 'ts':
         #     assert self.network in sequential_net_name, \
@@ -422,8 +506,8 @@ class DeepSADTS(BaseModel):
         self.prt_steps = prt_steps
         self.verbose = verbose
 
-        self.n_features = -1
-        self.n_samples = -1
+        self.n_features = n_features
+        self.n_samples = n_samples
         self.criterion = None
         self.net = None
 
@@ -450,6 +534,14 @@ class DeepSADTS(BaseModel):
         return
 
 
+    def set_seed(self,seed):
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        # torch.backends.cudnn.benchmark = False
+        # torch.backends.cudnn.deterministic = True
     def _handle_n_hidden(self, n_hidden):
         if type(n_hidden) == int:
             n_layers = 1
@@ -572,7 +664,7 @@ class DeepSADTS(BaseModel):
         s = criterion(batch_z)
         return batch_z, s
 
-    def _set_c(self, net, dataloader, eps=0.1):
+    def _set_c(self, dataloader, eps=0.1):
         """
         Initializes the center 'c' for the hypersphere.
 
@@ -594,12 +686,12 @@ class DeepSADTS(BaseModel):
             
         """
         
-        net.eval()
+        self.eval()
         z_ = []
         with torch.no_grad():
             for x, _ in dataloader:
-                x = x.float().to(self.device)
-                z = net(x)
+                x = x[0].unsqueeze(0).float().to(self.device)
+                z = self.forward(x)
                 z_.append(z.detach())
         z_ = torch.cat(z_)
         c = torch.mean(z_, dim=0)
@@ -618,11 +710,6 @@ class DeepSADTS(BaseModel):
         Returns:
             output: (batch_size, num_classes)
         """
-
-        #TODO: preprocess label of inputs
-        known_anom_id = np.where(y == 1)
-        y = np.zeros_like(y)
-        y[known_anom_id] = -1
 
         # permute because pytorch convention for transformers is [seq_length, batch_size, feat_dim]. padding_masks [batch_size, feat_dim]
 

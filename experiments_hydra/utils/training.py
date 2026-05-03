@@ -16,6 +16,7 @@ from timesead.data.sampler import BalancedBatchSampler
 from .config import to_plain_config
 from .dataset import get_dataloader
 from experiments_hydra.utils import get_data_labels
+from timesead.models.supervised import DSADLoss
 
 
 def instantiate_loss(

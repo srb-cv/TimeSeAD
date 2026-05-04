@@ -47,18 +47,15 @@ class DSADLoss(torch.nn.Module):
         self.eta = eta
         self.eps = eps
 
-    def forward(self, rep, semi_targets=None, reduction=None):
-        #TODO: preprocess label of inputs
-        # known_anom_id = np.where(y == 1)
-        # y = np.zeros_like(y)
-        # y[known_anom_id] = -1
+    def forward(self, rep, labels, reduction=None, epoch=0, num_epochs=0):
+        labels = labels[0]
+        rep = rep[0]
+        labels = (labels == 1).any(dim=1, keepdim=True).long()
+        labels = - labels
+        
         dist = torch.sum((rep - self.c) ** 2, dim=1)
-
-        if semi_targets is not None:
-            loss = torch.where(semi_targets == 0, dist,
-                               self.eta * ((dist+self.eps) ** semi_targets.float()))
-        else:
-            loss = dist
+        loss = torch.where(labels == 0, dist,
+                           self.eta * ((dist+self.eps) ** labels.float()))
 
         if reduction is None:
             reduction = self.reduction
@@ -394,6 +391,8 @@ class DeepSADTS(BaseModel):
 
     def __init__(self,
                  train_loader,
+                 n_features,
+                 n_samples,
                  epochs=100,
                  batch_size=64,
                  lr=1e-3,
@@ -420,8 +419,8 @@ class DeepSADTS(BaseModel):
 
         self._initialize_base_hyperparamters(
             model_name='DeepSAD',
-            n_features=train_loader.num_features,
-            n_samples=len(train_loader),
+            n_features=n_features,
+            n_samples=n_samples,
             epochs=epochs,
             batch_size=batch_size,
             lr=lr,
@@ -446,8 +445,6 @@ class DeepSADTS(BaseModel):
         self.pos_encoding = pos_encoding
         self.norm = norm
 
-        self.c = None
-
         network_params = {
             'n_features': self.n_features,
             'n_hidden': self.hidden_dims,
@@ -464,10 +461,7 @@ class DeepSADTS(BaseModel):
 
         self._initialize_architecture(**network_params)
 
-        self.c = self._set_c(train_loader)
-        self.criterion = DSADLoss(c=self.c)
-
-        return self.c
+        self.c = torch.rand(1, 768) # self._set_c(train_loader) 
     
     def _initialize_base_hyperparamters(
             self,
@@ -533,7 +527,6 @@ class DeepSADTS(BaseModel):
         self.set_seed(random_state)
         return
 
-
     def set_seed(self,seed):
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
@@ -542,6 +535,7 @@ class DeepSADTS(BaseModel):
         random.seed(seed)
         # torch.backends.cudnn.benchmark = False
         # torch.backends.cudnn.deterministic = True
+    
     def _handle_n_hidden(self, n_hidden):
         if type(n_hidden) == int:
             n_layers = 1
@@ -686,11 +680,11 @@ class DeepSADTS(BaseModel):
             
         """
         
+        self.to(self.device)
         self.eval()
         z_ = []
         with torch.no_grad():
             for x, _ in dataloader:
-                x = x[0].unsqueeze(0).float().to(self.device)
                 z = self.forward(x)
                 z_.append(z.detach())
         z_ = torch.cat(z_)
@@ -718,6 +712,7 @@ class DeepSADTS(BaseModel):
         # inp = self.pos_enc(inp)  # add positional encoding
 
         # data embedding
+        X = X[0].to(self.device)
         inp = self.project_inp(X) + self.pos_enc(X)
         # inp = self.dropout(inp)
         inp = inp.permute(1, 0, 2)
@@ -739,6 +734,6 @@ class DeepSADTS(BaseModel):
 
         return output
 
-
-    
+    def get_center(self):
+        return self.c
     

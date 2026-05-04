@@ -5,6 +5,7 @@ from timesead.models.prediction import LSTMS2SPrediction, LSTMS2SPredictionAnoma
 from timesead.models.supervised import DeepSADTS
 from timesead.utils.utils import str2cls
 from experiments_hydra.utils.config import to_plain_config
+import torch
 
 from experiments_hydra.utils import (
     load_best_model_if_available,
@@ -26,8 +27,16 @@ def run(cfg):
     with start_mlflow_run(cfg) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))
-        c = DeepSADTS(
-            train_loader=train_ds,
+        dataloader = torch.utils.data.DataLoader(
+            train_ds,
+            batch_size=cfg.training["batch_size"],
+            num_workers=cfg.training["num_workers"],
+            drop_last=cfg.training["drop_last"],
+        )
+        model = DeepSADTS(
+            train_loader=dataloader,
+            n_features=train_ds.num_features,
+            n_samples=len(train_ds),
             rep_dim = train_ds.num_features,
             hidden_dims=cfg.model.hidden_dims,
             act=cfg.model.act,

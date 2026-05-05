@@ -13,8 +13,8 @@ class DSADTargetTransform(SupervisionTargetTransform):
                                                      step_size=window_size, reverse=reverse)
         
 
-class DSADSupervisionAnomalyDetector():
-    def __init__(self, model: AnomalyDetector, criterion: DSADLoss):
+class DSADSupervisionAnomalyDetector(AnomalyDetector):
+    def __init__(self, model, criterion: DSADLoss):
         """
         Filonov2016
 
@@ -33,13 +33,13 @@ class DSADSupervisionAnomalyDetector():
     def compute_online_anomaly_score(self, inputs: Tuple[torch.Tensor, torch.Tensor, float, float]) \
             -> Tuple[torch.Tensor, float, float]:
         # x: (T, B, D), target: (T, B, D), moving_avg: ()
-        x, target, moving_avg_num, moving_avg_denom = inputs
+        b_inputs, b_targets, moving_avg_num, moving_avg_denom = inputs
 
         with torch.no_grad():
-            x_pred = self.model((x,))
+            x_pred = self.model(b_inputs)
 
-        sq_error = self.criterion(x_pred)
-        torch.square(sq_error, out=sq_error)
+        sq_error = self.criterion((x_pred,), b_targets)
+        
         sq_error = torch.sum(sq_error, dim=-1)
 
         T, B = sq_error.shape
@@ -70,8 +70,11 @@ class DSADSupervisionAnomalyDetector():
             x, = b_inputs
             label, target = b_targets
 
-            sq_error, moving_avg_num, moving_avg_denom = self.compute_online_anomaly_score((x, target, moving_avg_num,
-                                                                                            moving_avg_denom))
+            sq_error, moving_avg_num, moving_avg_denom = self.compute_online_anomaly_score((
+                b_inputs,
+                b_targets,
+                moving_avg_num,
+                moving_avg_denom))
             errors.append(sq_error)
             labels.append(label.cpu())
 

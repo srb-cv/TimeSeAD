@@ -35,7 +35,7 @@ training:
       milestones: [20]
       gamma: 0.1
   epochs: 70
-  device: cuda
+  device: cpu
   loss: DSADLoss
   trainer: timesead.optim.trainer.Trainer
   trainer_hooks:

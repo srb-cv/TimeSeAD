@@ -52,7 +52,7 @@ class DSADLoss(torch.nn.Module):
         rep = res[0]
         labels = labels[:, -1].unsqueeze(1).long()
         labels = -labels
-        
+
         dist = torch.sum((rep - self.c) ** 2, dim=1)
         loss = torch.where(labels == 0, dist,
                            self.eta * ((dist+self.eps) ** labels.float()))
@@ -600,57 +600,6 @@ class DeepSADTS(BaseModel):
         # self.output_layer = torch.nn.Linear(d_model * seq_len, n_output, bias=bias)
         self.output_layer = torch.nn.Linear(d_model, n_output, bias=bias)
 
-    def inference_prepare(self, X):
-        """
-        Prepares the model for inference by setting up data loaders.
-
-        Args:
-        
-            X (np.ndarray): 
-                The input feature matrix for inference.
-
-        Returns:
-        
-            test_loader (DataLoader): 
-                The data loader for inference.
-            
-        """
-        
-        test_loader = DataLoader(X, batch_size=self.batch_size,
-                                 drop_last=False, shuffle=False)
-        self.criterion.reduction = 'none'
-        return test_loader
-
-    def inference_forward(self, batch_x, net, criterion):
-        """
-        Performs a forward inference pass.
-
-        Args:
-            
-            batch_x (torch.Tensor):
-                A batch of input data.
-            
-            net (nn.Module): 
-                The neural network model.
-            
-            criterion (Loss): 
-                The loss function used to calculate the anomaly score.
-
-        Returns:
-            
-            batch_z (torch.Tensor): 
-                The encoded batch of data in the feature space.
-            
-            s (torch.Tensor): 
-                The anomaly scores for the batch.
-            
-        """
-        
-        batch_x = batch_x.float().to(self.device)
-        batch_z = net(batch_x)
-        s = criterion(batch_z)
-        return batch_z, s
-
     def _set_c(self, dataloader, eps=0.1):
         """
         Initializes the center 'c' for the hypersphere.
@@ -705,7 +654,7 @@ class DeepSADTS(BaseModel):
         # inp = self.pos_enc(inp)  # add positional encoding
 
         # data embedding
-        X = X[0].to(self.device)
+        X = X[0].to("cpu")
         inp = self.project_inp(X) + self.pos_enc(X)
         # inp = self.dropout(inp)
         inp = inp.permute(1, 0, 2)

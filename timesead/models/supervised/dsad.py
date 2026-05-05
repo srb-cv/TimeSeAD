@@ -601,12 +601,6 @@ class DeepSADTS(BaseModel):
         # self.output_layer = torch.nn.Linear(d_model * seq_len, n_output, bias=bias)
         self.output_layer = torch.nn.Linear(d_model, n_output, bias=bias)
 
-    def fit(self, X, y=None):
-        self.decision_scores_ = self.decision_function(X)
-        self.labels_ = self._process_decision_scores()
-
-        return self
-
     def inference_prepare(self, X):
         """
         Prepares the model for inference by setting up data loaders.

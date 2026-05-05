@@ -1,8 +1,8 @@
 from hydra import main as hydra_main
 from hydra.core.hydra_config import HydraConfig
 
-from timesead.models.prediction import LSTMS2SPrediction, LSTMS2SPredictionAnomalyDetector
-from timesead.models.supervised import DeepSADTS
+from timesead.models.supervised import DSADSupervisionAnomalyDetector
+from timesead.models.supervised import DeepSADTS, DSADLoss
 from timesead.utils.utils import str2cls
 from experiments_hydra.utils.config import to_plain_config
 import torch
@@ -69,7 +69,9 @@ def run(cfg):
         detector = None
         if cfg.experiment.train_detector:
             window_size = cfg.dataset.pipeline["prediction"]["args"]["window_size"]
-            detector = LSTMS2SPredictionAnomalyDetector(model, half_life=2 * window_size).to(cfg.training.device)
+            c = model.get_center()
+            criterion = DSADLoss(c=c)
+            detector = DSADSupervisionAnomalyDetector(model, criterion=criterion).to(cfg.training.device)
 
         save_final_artifact({"model": model, "detector": detector}, output_dir)
         return {"model": model, "detector": detector}

@@ -47,18 +47,17 @@ class DSADLoss(torch.nn.Module):
         self.eta = eta
         self.eps = eps
 
-    def forward(self, rep, labels, reduction=None, epoch=0, num_epochs=0):
-        labels = labels[0]
-        rep = rep[0]
-        labels = (labels == 1).any(dim=1, keepdim=True).long()
-        labels = - labels
+    def forward(self, res, targets, *args, **kwargs):
+        labels = targets[0]
+        rep = res[0]
+        labels = labels[:, -1].unsqueeze(1).long()
+        labels = -labels
         
         dist = torch.sum((rep - self.c) ** 2, dim=1)
         loss = torch.where(labels == 0, dist,
                            self.eta * ((dist+self.eps) ** labels.float()))
 
-        if reduction is None:
-            reduction = self.reduction
+        reduction = self.reduction
 
         if reduction == 'mean':
             return torch.mean(loss)
@@ -461,7 +460,7 @@ class DeepSADTS(BaseModel):
 
         self._initialize_architecture(**network_params)
 
-        self.c = torch.rand(1, 768) # self._set_c(train_loader) 
+        self.c = self._set_c(train_loader) 
     
     def _initialize_base_hyperparamters(
             self,

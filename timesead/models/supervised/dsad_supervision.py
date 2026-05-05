@@ -25,6 +25,7 @@ class DSADSupervisionAnomalyDetector():
 
         self.model = model
         self.criterion = criterion
+        self.criterion.reduction = 'none'
 
     def fit(self, dataset: torch.utils.data.DataLoader, **kwargs) -> None:
         pass
@@ -37,8 +38,7 @@ class DSADSupervisionAnomalyDetector():
         with torch.no_grad():
             x_pred = self.model((x,))
 
-        s = self.criterion(x_pred)
-        sq_error = target - x_pred
+        sq_error = self.criterion(x_pred)
         torch.square(sq_error, out=sq_error)
         sq_error = torch.sum(sq_error, dim=-1)
 

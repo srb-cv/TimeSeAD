@@ -71,7 +71,11 @@ def run(cfg):
             window_size = cfg.dataset.pipeline["prediction"]["args"]["window_size"]
             c = model.get_center()
             criterion = DSADLoss(c=c)
-            detector = DSADSupervisionAnomalyDetector(model, criterion=criterion).to(cfg.training.device)
+            detector = DSADSupervisionAnomalyDetector(
+                model=model,
+                criterion=criterion,
+                half_life=window_size,
+                ).to(cfg.training.device)
 
         save_final_artifact({"model": model, "detector": detector}, output_dir)
         return {"model": model, "detector": detector}

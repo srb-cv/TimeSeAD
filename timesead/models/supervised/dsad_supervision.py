@@ -3,6 +3,7 @@ from ..common import AnomalyDetector
 from timesead.models.supervised import DSADLoss
 import torch
 from ...utils import torch_utils
+from ...utils.utils import halflife2alpha
 from typing import Tuple
 
 
@@ -14,7 +15,7 @@ class DSADTargetTransform(SupervisionTargetTransform):
         
 
 class DSADSupervisionAnomalyDetector(AnomalyDetector):
-    def __init__(self, model, criterion: DSADLoss):
+    def __init__(self, model, criterion: DSADLoss, half_life: int):
         """
         Filonov2016
 
@@ -26,6 +27,8 @@ class DSADSupervisionAnomalyDetector(AnomalyDetector):
         self.model = model
         self.criterion = criterion
         self.criterion.reduction = 'none'
+
+        self.alpha = halflife2alpha(half_life)
 
     def fit(self, dataset: torch.utils.data.DataLoader, **kwargs) -> None:
         pass
@@ -42,13 +45,11 @@ class DSADSupervisionAnomalyDetector(AnomalyDetector):
         
         sq_error = torch.sum(sq_error, dim=-1)
 
-        T, B = sq_error.shape
-        sq_error = sq_error.T.flatten()
-        moving_avg_num, moving_avg_denom = torch_utils.exponential_moving_avg_(sq_error, self.alpha,
-                                                                               avg_num=moving_avg_num,
-                                                                               avg_denom=moving_avg_denom)
-
-        return sq_error.view(B, T).T, moving_avg_num, moving_avg_denom
+        # moving_avg_num, moving_avg_denom = torch_utils.exponential_moving_avg_(sq_error, self.alpha,
+        #                                                                        avg_num=moving_avg_num,
+        #                                                                        avg_denom=moving_avg_denom)
+        _, W, _= b_inputs[0].shape
+        return sq_error.unsqueeze(1).repeat(1, W), moving_avg_num, moving_avg_denom
 
     def compute_offline_anomaly_score(self, inputs: Tuple[torch.Tensor, ...]) -> torch.Tensor:
         raise NotImplementedError
@@ -78,8 +79,8 @@ class DSADSupervisionAnomalyDetector(AnomalyDetector):
             errors.append(sq_error)
             labels.append(label.cpu())
 
-        scores = torch.cat(errors, dim=1).transpose(0, 1).flatten()
-        labels = torch.cat(labels, dim=1).transpose(0, 1).flatten()
+        scores = torch.cat(errors, dim=0).transpose(0, 1).flatten()
+        labels = torch.cat(labels, dim=0).transpose(0, 1).flatten()
 
         assert labels.shape == scores.shape
 

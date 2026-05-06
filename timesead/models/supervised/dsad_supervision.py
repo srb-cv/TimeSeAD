@@ -45,9 +45,9 @@ class DSADSupervisionAnomalyDetector(AnomalyDetector):
         
         sq_error = torch.sum(sq_error, dim=-1)
 
-        # moving_avg_num, moving_avg_denom = torch_utils.exponential_moving_avg_(sq_error, self.alpha,
-        #                                                                        avg_num=moving_avg_num,
-        #                                                                        avg_denom=moving_avg_denom)
+        moving_avg_num, moving_avg_denom = torch_utils.exponential_moving_avg_(sq_error, self.alpha,
+                                                                               avg_num=moving_avg_num,
+                                                                               avg_denom=moving_avg_denom)
         _, W, _= b_inputs[0].shape
         return sq_error.unsqueeze(1).repeat(1, W), moving_avg_num, moving_avg_denom
 

@@ -654,7 +654,7 @@ class DeepSADTS(BaseModel):
         # inp = self.pos_enc(inp)  # add positional encoding
 
         # data embedding
-        X = X[0].to("cpu")
+        X = X[0].to(self.device)
         inp = self.project_inp(X) + self.pos_enc(X)
         # inp = self.dropout(inp)
         inp = inp.permute(1, 0, 2)

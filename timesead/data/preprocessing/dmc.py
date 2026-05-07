@@ -52,7 +52,8 @@ class DMCTask(Enum):
 def obtain_meta_data(
     json_path,
     tasks,
-    use_normaly_only,
+    use_unsupervised_training,
+    use_anomalous_as_normal=False,
     *,
     shuffle_test_files: bool = False,
     shuffle_seed: int = 0,
@@ -63,7 +64,8 @@ def obtain_meta_data(
     Input:
     - json_path: path to meta_dataset.json
     - tasks: list of DMCTask
-    - use_normaly_only: whether to keep only normal samples
+    - use_unsupervised_training: whether to keep a single training class
+    - use_anomalous_as_normal: whether to treat anomalous files as label 0 and normal files as label 1
     - shuffle_test_files: whether to deterministically shuffle the test file order
     - shuffle_seed: seed used for deterministic shuffling
 
@@ -85,18 +87,26 @@ def obtain_meta_data(
         task_name = task.name.lower()
 
         # load test metadata directly
-        test_meta_datas = list(dict_data[task_name]['test'])
+        if use_anomalous_as_normal:
+            test_meta_datas.extend(
+                [file_path, length, not label]
+                for file_path, length, label in dict_data[task_name]['test']
+            )
+        else:
+            test_meta_datas.extend(dict_data[task_name]['test'])
 
         # load train metadata
         temporary_meta_datas = dict_data[task_name]['train']
 
-        if use_normaly_only:
-            # filter only normal samples
-            for data in temporary_meta_datas:
-                if data[-1] == NORMAL_LABEL:
-                    train_meta_datas.append(data)
+        if use_unsupervised_training:
+            train_label = ANOMALY_LABEL if use_anomalous_as_normal else NORMAL_LABEL
+
+            for file_path, length, label in temporary_meta_datas:
+                if label == train_label:
+                    exposed_label = NORMAL_LABEL if use_anomalous_as_normal else label
+                    train_meta_datas.append([file_path, length, exposed_label])
         else:
-            train_meta_datas = temporary_meta_datas
+            train_meta_datas.extend(temporary_meta_datas)
 
     if shuffle_test_files and test_meta_datas:
         rng = random.Random(shuffle_seed)
@@ -146,14 +156,15 @@ def merge_stats(a, b):
     }
 
 
-def get_stats(path, tasks, use_normaly_only):
+def get_stats(path, tasks, use_unsupervised_training, use_anomalous_as_normal=False):
     """
     Load and merge statistics across tasks.
 
     Input:
     - path: preprocess directory
     - tasks: list of tasks
-    - use_normaly_only: include anomaly stats or not
+    - use_unsupervised_training: whether training uses a single class
+    - use_anomalous_as_normal: whether the anomalous class is used as that single class
 
     Output:
     - final_stats: combined statistics dict
@@ -165,17 +176,20 @@ def get_stats(path, tasks, use_normaly_only):
         task_name = task.name.lower()
         task_path = os.path.join(path, task_name)
 
-        # load normal stats
-        with np.load(os.path.join(task_path, NORMAL_STATISTICS_FILE)) as d:
-            normal_stats = dict(d)
+        if use_unsupervised_training:
+            stats_file = ANOMAL_STATISTICS_FILE if use_anomalous_as_normal else NORMAL_STATISTICS_FILE
 
-        final_stats = merge_stats(normal_stats, final_stats)
+            with np.load(os.path.join(task_path, stats_file)) as d:
+                class_stats = dict(d)
 
-        # optionally include anomaly stats
-        if not use_normaly_only:
+            final_stats = merge_stats(class_stats, final_stats)
+        else:
+            with np.load(os.path.join(task_path, NORMAL_STATISTICS_FILE)) as d:
+                normal_stats = dict(d)
+            final_stats = merge_stats(normal_stats, final_stats)
+
             with np.load(os.path.join(task_path, ANOMAL_STATISTICS_FILE)) as d:
                 anomaly_stats = dict(d)
-
             final_stats = merge_stats(anomaly_stats, final_stats)
 
     return final_stats

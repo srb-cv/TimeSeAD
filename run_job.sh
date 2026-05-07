@@ -6,8 +6,8 @@
 #SBATCH --ntasks=1                       # total number of tasks across all nodes
 #SBATCH --cpus-per-task=3                # use cpus-per-task number threads per taks
 #SBATCH -N 1                             # request slots on 1 node
-#SBATCH --output=sbatch_logs/week_17/sbatch_%j_out.log         # capture output
-#SBATCH --error=sbatch_logs/week_17/sbatch_%j_err.log         # and error streams
+#SBATCH --output=sbatch_logs/week_19/sbatch_%j_out.log         # capture output
+#SBATCH --error=sbatch_logs/week_19/sbatch_%j_err.log         # and error streams
 #SBATCH --gres=gpu:v100:1
 #SBATCH --account=RPTU-ML-VAD    # run with high priority using VAD account
 

@@ -97,7 +97,7 @@ def test_dmc_dataset_labels(real_dmc_root):
 
     _, targets = dataset[0]
 
-    # training should be normal only (if use_normal_only=True)
+    # unsupervised training exposes one training class as normal
     assert torch.all(targets[0] == 0)
 
 

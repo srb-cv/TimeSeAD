@@ -169,6 +169,107 @@ run keeps that value in its Hydra config. Evaluation also applies the training
 pipeline override to the labelled test pipeline, so the detector sees test data
 with the same window shape as the trained model expects.
 
+## Export Inference And Score Alignment
+
+When an exported Filonov prediction model is used outside the Hydra dataset
+pipeline, the external caller must recreate the same next-window shape before
+calling the saved detector.
+
+For a raw feature sequence:
+
+```text
+X shape = (B, D)
+W = window size
+```
+
+the Filonov detector uses pairs of windows:
+
+```text
+input  = X[t : t + W]
+target = X[t + W : t + 2W]
+```
+
+The model predicts a full target window of feature vectors. The detector then
+reduces each predicted feature vector to one scalar anomaly score by summing the
+squared feature error over `D`.
+
+For example, with `X.shape = (8, 10)` and `W = 3`:
+
+```text
+raw index:   0   1   2   3   4   5   6   7
+raw data:   x0  x1  x2  x3  x4  x5  x6  x7
+```
+
+The valid input-target pairs are:
+
+```text
+pair 0:
+input:     [x0  x1  x2]
+target:                [x3  x4  x5]
+
+pair 1:
+input:         [x1  x2  x3]
+target:                    [x4  x5  x6]
+
+pair 2:
+input:             [x2  x3  x4]
+target:                        [x5  x6  x7]
+```
+
+There are `B - 2W + 1 = 8 - 6 + 1 = 3` valid pairs. Each pair produces `W`
+scalar scores, one per target timestep, so the detector score matrix has shape
+`(W, num_pairs) = (3, 3)`:
+
+```text
+                 pair 0   pair 1   pair 2
+score step 0       x3       x4       x5
+score step 1       x4       x5       x6
+score step 2       x5       x6       x7
+```
+
+The score matrix maps back to raw indices as:
+
+```text
+scores[0, 0] -> raw index 3
+scores[1, 0] -> raw index 4
+scores[2, 0] -> raw index 5
+
+scores[0, 1] -> raw index 4
+scores[1, 1] -> raw index 5
+scores[2, 1] -> raw index 6
+
+scores[0, 2] -> raw index 5
+scores[1, 2] -> raw index 6
+scores[2, 2] -> raw index 7
+```
+
+After alignment, overlapping score contributions are averaged:
+
+```text
+raw index:     0     1     2        3          4             5             6          7
+aligned:       -     -     -     s[0,0]   mean(2 vals)  mean(3 vals)  mean(2 vals)  s[2,2]
+```
+
+Equivalently:
+
+```text
+aligned[3] = scores[0, 0]
+aligned[4] = mean(scores[1, 0], scores[0, 1])
+aligned[5] = mean(scores[2, 0], scores[1, 1], scores[0, 2])
+aligned[6] = mean(scores[2, 1], scores[1, 2])
+aligned[7] = scores[2, 2]
+```
+
+The first `W` raw frames cannot be scored by this next-window detector because
+no earlier input window predicts them. If the unscored prefix is dropped, the
+aligned score series has length:
+
+```text
+B - W = 8 - 3 = 5
+```
+
+and corresponds to raw indices `3, 4, 5, 6, 7`.
+
 ## DataLoader Construction
 
 `experiments_hydra.utils.dataset.get_dataloader(...)` wraps a

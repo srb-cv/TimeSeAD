@@ -36,7 +36,8 @@ class DMCDataset(BaseTSDataset):
             task_id: Union[int, List[int]] = 1, # change name
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
-            use_normal_only: bool = True,
+            use_unsupervised_training: bool = True,
+            use_anomalous_as_normal: bool = False,
             preprocess: bool = True,
             shuffle_test_files: bool = False,
             shuffle_seed: int = 0,
@@ -49,6 +50,8 @@ class DMCDataset(BaseTSDataset):
         :param standardize: Can be either a bool that decides whether to apply the dataset-dependent default
             standardization or a function with signature (dataframe, stats) -> dataframe, where stats is a dictionary of
             common statistics on the training dataset (i.e., mean, std, median, etc. for each feature)
+        :param use_unsupervised_training: Whether training should use a single class.
+        :param use_anomalous_as_normal: Whether anomalous training files should be used as the single training class.
         :param download: Whether to download the dataset if it doesn't exist.
         :param preprocess: Whether to setup the dataset for experiments.
         """
@@ -70,10 +73,11 @@ class DMCDataset(BaseTSDataset):
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
-        self.preprocess_path = os.path.join(os.getcwd(), "mlruns_hydra/preprocess")
+        self.preprocess_path = os.path.join(os.getcwd(), "data/dmc/preprocess")
 
         self.training = training
-        self.use_normal_only = use_normal_only
+        self.use_unsupervised_training = use_unsupervised_training
+        self.use_anomalous_as_normal = use_anomalous_as_normal
         self.shuffle_test_files = shuffle_test_files
         self.shuffle_seed = shuffle_seed
 
@@ -120,7 +124,8 @@ class DMCDataset(BaseTSDataset):
         self.train_meta_datas, self.test_meta_datas = obtain_meta_data(
             json_path=json_file,
             tasks=self.task_id,
-            use_normaly_only=self.use_normal_only,
+            use_unsupervised_training=self.use_unsupervised_training,
+            use_anomalous_as_normal=self.use_anomalous_as_normal,
             shuffle_test_files=self.shuffle_test_files,
             shuffle_seed=self.shuffle_seed,
         )
@@ -133,7 +138,8 @@ class DMCDataset(BaseTSDataset):
         stats = get_stats(
             path=self.preprocess_path,
             tasks=self.task_id,
-            use_normaly_only=self.use_normal_only
+            use_unsupervised_training=self.use_unsupervised_training,
+            use_anomalous_as_normal=self.use_anomalous_as_normal,
         )
 
         # define normalization function

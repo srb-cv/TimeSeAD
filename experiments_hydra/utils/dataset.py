@@ -3,6 +3,7 @@ import copy
 from typing import Any, Dict, List, Tuple
 
 import torch
+from torch.utils.data import Sampler
 
 from timesead.data.dataset import collate_fn
 from timesead.data.transforms import PipelineDataset, make_dataset_split, make_pipe_from_dict
@@ -54,8 +55,17 @@ def load_dataset(
     return result
 
 
-def get_dataloader(dataset, training_cfg):
+def get_dataloader(dataset, training_cfg, sampler: Sampler = None):
     training_cfg = to_plain_config(training_cfg)
+
+    if sampler is not None:
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_sampler=sampler,
+            num_workers=training_cfg["num_workers"],
+            collate_fn=collate_fn(training_cfg["batch_dim"]),
+        )
+
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=training_cfg["batch_size"],
@@ -64,3 +74,12 @@ def get_dataloader(dataset, training_cfg):
         collate_fn=collate_fn(training_cfg["batch_dim"]),
         drop_last=training_cfg["drop_last"],
     )
+
+
+def get_data_labels(dataset: PipelineDataset):
+    labels = []
+    for _, targets in dataset:
+        label = targets[0].max().item()
+        labels.append(label)
+
+    return labels

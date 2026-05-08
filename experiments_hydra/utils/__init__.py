@@ -1,6 +1,6 @@
 from .artifacts import save_final_artifact
 from .config import flatten_config, to_plain_config
-from .dataset import get_dataloader, load_dataset
+from .dataset import get_data_labels, get_dataloader, load_dataset
 from .mlflow import (
     MLflowMetricLogger,
     log_hydra_run_reference,

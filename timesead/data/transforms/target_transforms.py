@@ -114,6 +114,42 @@ class PredictionTargetTransform(WindowTransformIfNotWindow):
             return self.input_window_size
         else:
             return self.parent.window_size
+        
+class SupervisionTargetTransform(WindowTransformIfNotWindow):
+    """
+    Adds the last `prediction_window` points from the current inputs as targets for prediction objectives.
+    """
+    def __init__(self, parent: Transform, window_size: int, prediction_horizon: int, replace_labels: bool = False,
+                 step_size: int = 1, reverse: bool = False):
+        """
+
+        :param parent: Another :class:`~timesead.data.transforms.Transform` which is used as the data source for this
+            :class:`~timesead.data.transforms.Transform`.
+        :param prediction_horizon: Number of datapoints that should be predicted.
+        :param replace_labels: Whether the original labels should be replaced by the prediction target.
+           If `False`, the prediction target will be added to the tuple of original labels.
+        """
+        super(SupervisionTargetTransform, self).__init__(parent, window_size + prediction_horizon, step_size, reverse)
+
+        self.input_window_size = window_size
+        self.prediction_horizon = prediction_horizon
+        self.replace_labels = replace_labels
+
+    def _get_datapoint_impl(self, item: int) -> Tuple[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]]:
+        inputs, targets = super(SupervisionTargetTransform, self)._get_datapoint_impl(item)
+
+        new_inputs = tuple(inp[:-self.prediction_horizon] for inp in inputs)
+        new_targets = tuple(inp[-self.prediction_horizon:] for inp in inputs)
+        targets = tuple(target[-self.prediction_horizon:] for target in targets)
+
+        return new_inputs, targets + new_targets
+
+    @property
+    def seq_len(self) -> Union[int, List[int]]:
+        if self.parent.ndim == 2:
+            return self.input_window_size
+        else:
+            return self.parent.window_size
 
 
 class OverlapPredictionTargetTransform(Transform):

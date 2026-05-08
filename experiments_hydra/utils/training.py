@@ -1,9 +1,12 @@
 import collections.abc
 from pathlib import Path
-from typing import Type, Union
+from typing import List, Type, Union
 
 import torch
+from torch.utils.data import Sampler
 
+from timesead.data.sampler import BalancedBatchSampler
+from timesead.models.supervised import DSADLoss
 from timesead.optim.loss import Loss, TorchLossWrapper
 from timesead.optim.trainer import CheckpointHook, EarlyStoppingHook
 from timesead.optim.trainer import Trainer
@@ -12,7 +15,7 @@ from timesead.utils.torch_utils import run_deterministic, run_fast
 from timesead.utils.utils import objspec2constructor
 
 from .config import to_plain_config
-from .dataset import get_dataloader
+from .dataset import get_data_labels, get_dataloader
 
 
 def instantiate_loss(
@@ -29,8 +32,22 @@ def instantiate_loss(
 
     return loss
 
+def instantiate_losses(
+    losses: List[Union[str, Loss, Type[Loss], torch.nn.modules.loss._Loss, Type[torch.nn.modules.loss._Loss]]],
+    model,
+):
+    instantiated_losses = []
+    for loss in losses:
+        if loss == "DSADLoss":
+            c = model.get_center()
+            instantiated_loss = DSADLoss(c=c)
+        else:
+            instantiated_loss = instantiate_loss(loss)
+        instantiated_losses.append(instantiated_loss)
+    return instantiated_losses
 
-def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, seed: int = 0):
+
+def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, seed: int = 0, sampler: Sampler = None):
     training_cfg = to_plain_config(training_cfg)
     set_seed(seed)
 
@@ -39,7 +56,16 @@ def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, 
     else:
         run_fast()
 
-    train_loader = get_dataloader(train_ds, {**training_cfg, "shuffle": True})
+    if sampler is None and training_cfg.get("supervised", False):
+        labels = get_data_labels(
+            dataset=train_ds,
+        )
+        sampler = BalancedBatchSampler(
+            labels=labels,
+            batch_size=training_cfg["batch_size"],
+        )
+
+    train_loader = get_dataloader(train_ds, {**training_cfg, "shuffle": True}, sampler)
     val_loader = get_dataloader(val_ds, {**training_cfg, "shuffle": False})
 
     optimizer = objspec2constructor(training_cfg["optimizer"])
@@ -75,7 +101,7 @@ def train_model(model, train_ds, val_ds, training_cfg, output_dir: str, logger, 
     if isinstance(losses, (str, bytes)) or not isinstance(losses, collections.abc.Sequence) or isinstance(losses, dict):
         losses = [losses]
 
-    losses = [instantiate_loss(loss) for loss in losses]
+    losses = instantiate_losses(losses=losses, model=model)
     trainer.train(model, losses, training_cfg["epochs"], log_fn=logger.log_metric)
 
     return trainer

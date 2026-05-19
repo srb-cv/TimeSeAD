@@ -11,7 +11,7 @@ import torch
 from timesead.data.dataset import BaseTSDataset
 from timesead.data.preprocessing import minmax_scaler
 from timesead.utils.metadata import DATA_DIRECTORY
-from timesead.data.preprocessing.dmc import DMCTask
+from timesead.data.preprocessing.meta_world import MetaWorldTask
 from timesead.data.preprocessing.control_task_common import construct_meta_data, get_stats, obtain_meta_data, META_DATASET_FILE, parse_meta_data
 
 
@@ -19,9 +19,9 @@ _logger = logging.getLogger(__name__)
 
 
 
-class DMCDataset(BaseTSDataset):
+class MetaWorldDataset(BaseTSDataset):
     """
-    Dataset loader for DMC (DeepMind Control) time series anomaly detection.
+    Dataset loader for Meta World time series anomaly detection.
 
     Main goal:
     - Load raw .npz files
@@ -29,11 +29,11 @@ class DMCDataset(BaseTSDataset):
     - Apply preprocessing (normalization)
     - Provide PyTorch-compatible dataset interface
     """
-    task_values = [e.value for e in DMCTask]
+    task_values = [e.value for e in MetaWorldTask]
 
     def __init__(
             self,
-            dataset_path: str = os.path.join(DATA_DIRECTORY, 'dmc'),
+            dataset_path: str = os.path.join(DATA_DIRECTORY, 'meta-world'),
             task_id: Union[int, List[int]] = 1, # change name
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
@@ -65,16 +65,16 @@ class DMCDataset(BaseTSDataset):
         self.task_id = []
         for i in task_id:
             if i not in self.task_values:
-                raise ValueError(f'DMC Task must be one of {self.task_values}')
+                raise ValueError(f'Meta World Task must be one of {self.task_values}')
             else:
-                self.task_id.append(DMCTask(i))
+                self.task_id.append(MetaWorldTask(i))
 
         
         # define paths
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
-        self.preprocess_path = os.path.join(os.getcwd(), "data/dmc/preprocess")
+        self.preprocess_path = os.path.join(os.getcwd(), "data/meta-world/preprocess")
 
         self.training = training
         self.use_unsupervised_training = use_unsupervised_training
@@ -253,7 +253,7 @@ class DMCDataset(BaseTSDataset):
                         return False
         return True
 
-    def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
+    def _search_missing_preprocessed_tasks(self) -> List[MetaWorldTask]:
         """
         Check which tasks are missing metadata.
 

@@ -85,6 +85,36 @@ def test_obtain_meta_data_keeps_all_training_files_for_supervised_training(tmp_p
     assert train_meta == train_entries
 
 
+def test_obtain_meta_data_can_deterministically_shuffle_train_files(tmp_path):
+    # Build a synthetic meta_dataset.json that mimics the real structure.
+    # JSON roundtrips tuples as lists, so keep entries list-shaped.
+    train_entries = [
+        [f"train/file_{idx:02d}.npz", 100 + idx, bool(idx % 2)]
+        for idx in range(12)
+    ]
+    meta_path = _write_meta_dataset(tmp_path, train_entries=train_entries)
+
+    train_unshuffled, _ = obtain_meta_data(
+        meta_path,
+        tasks=[DMCTask.CHEETAH_RUN],
+        use_unsupervised_training=False,
+        shuffle_train_files=False,
+    )
+    assert train_unshuffled == train_entries
+
+    expected_seed0 = list(train_entries)
+    random.Random(0).shuffle(expected_seed0)
+    train_shuffled_seed0, _ = obtain_meta_data(
+        meta_path,
+        tasks=[DMCTask.CHEETAH_RUN],
+        use_unsupervised_training=False,
+        shuffle_train_files=True,
+        shuffle_seed=0,
+    )
+    assert train_shuffled_seed0 == expected_seed0
+    assert sorted(train_shuffled_seed0) == sorted(train_entries)
+
+
 def test_obtain_meta_data_can_deterministically_shuffle_test_files(tmp_path):
     # Build a synthetic meta_dataset.json that mimics the real structure.
     # JSON roundtrips tuples as lists, so keep entries list-shaped.

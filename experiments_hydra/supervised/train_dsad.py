@@ -1,11 +1,14 @@
+import copy
+from typing import Any, Dict
+
 from hydra import main as hydra_main
 from hydra.core.hydra_config import HydraConfig
 
+from experiments_hydra.utils.config import to_plain_config
+from experiments_hydra.utils.dataset import get_data_labels, get_dataloader
+from experiments_hydra.utils.post_training import maybe_evaluate_after_training
 from timesead.models.supervised import DSADSupervisionAnomalyDetector
 from timesead.models.supervised import DeepSADTS, DSADLoss
-from timesead.utils.utils import str2cls
-from experiments_hydra.utils.config import to_plain_config
-import torch
 
 from experiments_hydra.utils import (
     load_best_model_if_available,
@@ -15,7 +18,18 @@ from experiments_hydra.utils import (
     start_mlflow_run,
     train_model,
 )
-import os
+
+
+def build_center_dataset_cfg(dataset_cfg: Any) -> Dict[str, Any]:
+    """Return a normal-only training dataset config for DeepSAD center initialization."""
+
+    center_cfg = copy.deepcopy(to_plain_config(dataset_cfg))
+    center_cfg.setdefault("ds_args", {})
+    center_cfg["ds_args"]["training"] = True
+    center_cfg["ds_args"]["use_unsupervised_training"] = True
+    center_cfg["ds_args"]["use_anomalous_as_normal"] = False
+    return center_cfg
+
 
 @hydra_main(
     version_base=None,
@@ -24,17 +38,14 @@ import os
 )
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-    with start_mlflow_run(cfg) as logger:
+    with start_mlflow_run(cfg, output_dir=output_dir) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))
-        dataloader = torch.utils.data.DataLoader(
-            train_ds,
-            batch_size=cfg.training["batch_size"],
-            num_workers=cfg.training["num_workers"],
-            drop_last=cfg.training["drop_last"],
-        )
+        center_train_ds, _ = load_dataset(**build_center_dataset_cfg(cfg.dataset))
+        center_loader = get_dataloader(center_train_ds, {**cfg.training, "shuffle": False, "drop_last": False})
+
         model = DeepSADTS(
-            train_loader=dataloader,
+            train_loader=center_loader,
             n_features=train_ds.num_features,
             n_samples=len(train_ds),
             rep_dim = train_ds.num_features,
@@ -78,6 +89,7 @@ def run(cfg):
                 ).to(cfg.training.device)
 
         save_final_artifact({"model": model, "detector": detector}, output_dir)
+        maybe_evaluate_after_training(cfg, output_dir)
         return {"model": model, "detector": detector}
 
 

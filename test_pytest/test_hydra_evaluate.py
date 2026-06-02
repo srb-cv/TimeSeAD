@@ -280,6 +280,91 @@ def test_evaluate_run_with_holdout_tunes_on_one_split_and_reports_on_other(
     assert (tmp_path / "evaluation_summary.json").exists()
 
 
+def test_evaluate_run_with_holdout_uses_saved_artifact_for_supervised_flow(
+    monkeypatch, tmp_path
+):
+    training_cfg = {
+        "experiment": {"family": "supervised"},
+        "training": {"device": "cpu"},
+        "dataset": {"split": [0.5, 0.5], "split_axis": "time"},
+        "sweep": {
+            "validation_metric": "best_f1_score",
+            "evaluation_metrics": ["best_f1_score", "auprc"],
+        },
+    }
+    tune_labels = torch.tensor([0, 1, 1, 0], dtype=torch.long)
+    tune_scores = torch.tensor([0.1, 0.9, 0.8, 0.2], dtype=torch.float)
+    eval_labels = torch.tensor([0, 1, 0, 1], dtype=torch.long)
+    eval_scores = torch.tensor([0.3, 0.85, 0.7, 0.75], dtype=torch.float)
+    saved_detector = object()
+    build_calls = []
+
+    monkeypatch.setattr(
+        "experiments_hydra.evaluate.load_training_cfg",
+        lambda run_dir: training_cfg,
+    )
+    monkeypatch.setattr(
+        "experiments_hydra.evaluate.build_labelled_test_splits",
+        lambda *args, **kwargs: (
+            {"split": [0.5, 0.5], "split_axis": "time"},
+            ["tune_split", "eval_split"],
+        ),
+    )
+
+    def fake_build_detector_from_run(run_dir, *, device, prefer_saved_detector):
+        build_calls.append(
+            {
+                "run_dir": run_dir,
+                "device": device,
+                "prefer_saved_detector": prefer_saved_detector,
+            }
+        )
+        return saved_detector
+
+    monkeypatch.setattr(
+        "experiments_hydra.evaluate.build_detector_from_run",
+        fake_build_detector_from_run,
+    )
+    monkeypatch.setattr(
+        "experiments_hydra.evaluate.build_training_validation_loader",
+        lambda *args, **kwargs: pytest.fail(
+            "saved-artifact supervised evaluation must not build a training validation loader"
+        ),
+    )
+
+    def fake_collect_labels_and_scores(detector, dataset, training_cfg):
+        assert detector is saved_detector
+        if dataset == "tune_split":
+            return tune_labels, tune_scores
+        if dataset == "eval_split":
+            return eval_labels, eval_scores
+        raise AssertionError(f"Unexpected dataset {dataset!r}")
+
+    monkeypatch.setattr(
+        "experiments_hydra.evaluate.collect_labels_and_scores",
+        fake_collect_labels_and_scores,
+    )
+
+    summary = evaluate_run_with_holdout(
+        run_dir=tmp_path,
+        threshold_metric="best_f1_score",
+        fit_detector_on="saved_artifact",
+        log_to_mlflow=False,
+    )
+
+    assert summary["fit"] == {"source": "saved_artifact"}
+    assert build_calls == [
+        {
+            "run_dir": tmp_path.resolve(),
+            "device": "cpu",
+            "prefer_saved_detector": True,
+        }
+    ]
+    assert summary["tuning"]["split_index"] == 0
+    assert summary["evaluation"]["split_index"] == 1
+    assert summary["metrics"]["f1_score"]["score"] == pytest.approx(2 / 3)
+
+
 def test_maybe_log_to_mlflow_reuses_active_matching_run(monkeypatch, tmp_path):
     class ActiveRunInfo:
         run_id = "run-123"

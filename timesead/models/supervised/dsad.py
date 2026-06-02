@@ -47,15 +47,24 @@ class DSADLoss(torch.nn.Module):
         self.eta = eta
         self.eps = eps
 
-    def forward(self, res, targets, *args, **kwargs):
+    def forward(
+        self,
+        res: Tuple[torch.Tensor, ...],
+        targets: Tuple[torch.Tensor, ...],
+        *args,
+        **kwargs,
+    ) -> torch.Tensor:
         labels = targets[0]
         rep = res[0]
-        labels = labels[:, -1].unsqueeze(1).long()
-        labels = -labels
+        if labels.ndim > 1:
+            labels = torch.any(labels != 0, dim=1)
+
+        # DeepSAD uses -1 for known anomalies; TimeSeAD labels anomalies as 1.
+        labels = -labels.long().unsqueeze(1)
 
         dist = torch.sum((rep - self.c) ** 2, dim=1, keepdim=True)
         loss = torch.where(labels == 0, dist,
-                           self.eta * ((dist+self.eps) ** labels.float()))
+                           self.eta * ((dist + self.eps) ** labels.float()))
 
         reduction = self.reduction
 

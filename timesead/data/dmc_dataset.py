@@ -33,12 +33,13 @@ class DMCDataset(BaseTSDataset):
     def __init__(
             self,
             dataset_path: str = os.path.join(DATA_DIRECTORY, 'dmc'),
-            task_id: Union[int, List[int]] = 1, # change name
+            task_id: Union[int, List[int]] = 2, # change name
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
             use_unsupervised_training: bool = True,
             use_anomalous_as_normal: bool = False,
             preprocess: bool = True,
+            shuffle_train_files: bool = False,
             shuffle_test_files: bool = False,
             shuffle_seed: int = 0,
             ):
@@ -78,6 +79,7 @@ class DMCDataset(BaseTSDataset):
         self.training = training
         self.use_unsupervised_training = use_unsupervised_training
         self.use_anomalous_as_normal = use_anomalous_as_normal
+        self.shuffle_train_files = shuffle_train_files
         self.shuffle_test_files = shuffle_test_files
         self.shuffle_seed = shuffle_seed
 
@@ -126,6 +128,7 @@ class DMCDataset(BaseTSDataset):
             tasks=self.task_id,
             use_unsupervised_training=self.use_unsupervised_training,
             use_anomalous_as_normal=self.use_anomalous_as_normal,
+            shuffle_train_files=self.shuffle_train_files,
             shuffle_test_files=self.shuffle_test_files,
             shuffle_seed=self.shuffle_seed,
         )

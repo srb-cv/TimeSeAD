@@ -30,23 +30,14 @@ class DMCTask(Enum):
     Enum representing all DMC tasks.
     Used to select which environment/task dataset to load.
     """
-    ACROBOT_SWINGUP = 0
-    CHEETAH_RUN = 1
-    FINGER_TURN_HARD = 2
-    PENDULUM_SWINGUP = 3
-    QUADRUPED_RUN = 4
-    REACHER_HARD = 5
-    CARTPOLE_BALANCE = 6
-    CUP_CATCH = 7
-    HOPPER_STAND = 8
-    POINTMASS_EASY = 9
-    QUADRUPED_WALK = 10
-    WALKER_WALK = 11
-    CARTPOLE_SWINGUP = 12
-    FINGER_SPIN = 13
-    MANIPULATOR_BRING_BALL = 14
-    POINTMASS_HARD = 15
-    REACHER_EASY = 16
+    CARTPOLE_BALANCE = 0
+    CARTPOLE_SWINGUP = 1
+    CHEETAH_RUN = 2
+    HOPPER_STAND = 3
+    FINGER_SPIN = 4
+    QUADRUPED_RUN = 5
+    QUADRUPED_WALK = 6
+    WALKER_WALK = 7
 
 
 def obtain_meta_data(
@@ -55,6 +46,7 @@ def obtain_meta_data(
     use_unsupervised_training,
     use_anomalous_as_normal=False,
     *,
+    shuffle_train_files: bool = False,
     shuffle_test_files: bool = False,
     shuffle_seed: int = 0,
 ):
@@ -66,6 +58,7 @@ def obtain_meta_data(
     - tasks: list of DMCTask
     - use_unsupervised_training: whether to keep a single training class
     - use_anomalous_as_normal: whether to treat anomalous files as label 0 and normal files as label 1
+    - shuffle_train_files: whether to deterministically shuffle the training file order
     - shuffle_test_files: whether to deterministically shuffle the test file order
     - shuffle_seed: seed used for deterministic shuffling
 
@@ -107,6 +100,10 @@ def obtain_meta_data(
                     train_meta_datas.append([file_path, length, exposed_label])
         else:
             train_meta_datas.extend(temporary_meta_datas)
+
+    if shuffle_train_files and train_meta_datas:
+        rng = random.Random(shuffle_seed)
+        rng.shuffle(train_meta_datas)
 
     if shuffle_test_files and test_meta_datas:
         rng = random.Random(shuffle_seed)

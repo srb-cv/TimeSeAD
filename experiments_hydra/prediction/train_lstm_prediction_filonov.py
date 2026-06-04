@@ -22,7 +22,7 @@ from experiments_hydra.utils import (
 @hydra_main(
     version_base=None,
     config_path="../configs",
-    config_name="meta-world/prediction/train_lstm_prediction_filonov",
+    config_name="meta_world/prediction/train_lstm_prediction_filonov",
 )
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir

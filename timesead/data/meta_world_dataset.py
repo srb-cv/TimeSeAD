@@ -33,7 +33,7 @@ class MetaWorldDataset(BaseTSDataset):
 
     def __init__(
             self,
-            dataset_path: str = os.path.join(DATA_DIRECTORY, 'meta-world'),
+            dataset_path: str = os.path.join(DATA_DIRECTORY, 'meta_world'),
             task_id: Union[int, List[int]] = 1, # change name
             training: bool = True,
             standardize: Union[bool,Callable[[pd.DataFrame, Dict],pd.DataFrame]] = True,
@@ -74,7 +74,7 @@ class MetaWorldDataset(BaseTSDataset):
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
-        self.preprocess_path = os.path.join(os.getcwd(), "data/meta-world/preprocess")
+        self.preprocess_path = os.path.join(os.getcwd(), "data/meta_world/preprocess")
 
         self.training = training
         self.use_unsupervised_training = use_unsupervised_training
@@ -250,6 +250,7 @@ class MetaWorldDataset(BaseTSDataset):
                         task.name.lower()
                         )
                     if not os.path.isdir(data_folder_path):
+                        print(data_folder_path)
                         return False
         return True
 

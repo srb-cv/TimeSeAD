@@ -6,27 +6,30 @@ dataset:
     task_id: [1]
     use_unsupervised_training: false
     use_anomalous_as_normal: false
+    shuffle_train_files: true # needed for supervised training to ensure that the model does not see all normal samples before anomalous ones
+    shuffle_test_files: true
+    shuffle_seed: 0
   pipeline:
     prediction:
       class: timesead.models.supervised.DSADTargetTransform
       args:
-        window_size: 3
+        window_size: 32
         replace_labels: false #does not matter 
   test_pipeline:
     prediction:
       class: timesead.models.supervised.DSADTargetTransform
       args:
-        window_size: 3
+        window_size: 32
         replace_labels: false #does not matter
   use_dataset_pipeline: false
   split: [0.75, 0.25]
-  split_axis: time
+  split_axis: batch
 
 training:
   optimizer:
     class: torch.optim.Adam
     args: {}
-  batch_size: 128
+  batch_size: 32
   batch_dim: 0
   num_workers: 0
   drop_last: false
@@ -48,7 +51,7 @@ training:
   supervised: true
 
 model:
-  hidden_dims: 100,50
+  hidden_dims: 200,100
   act: ReLU
   attn: self_attn
   bias: true
@@ -69,6 +72,15 @@ experiment:
   mlflow_experiment_name: TimeSeAD-Hydra
   tracking_uri: null
   train_detector: true
+  evaluate_after_training: true
+  post_train_evaluation:
+    protocol: holdout_calibration # or single_split/ holdout_calibration
+    split: [0.3, 0.7]
+    tune_split_index: 0
+    eval_split_index: 1
+    threshold_metric: ${sweep.validation_metric}
+    fit_detector_on: saved_artifact
+    metric_names: ${sweep.evaluation_metrics}
   tags:
     pilot: "true"
 

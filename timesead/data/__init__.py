@@ -12,3 +12,4 @@ from .tep_dataset import TEPDataset
 from .wadi_dataset import WADIDataset
 from .dmc_dataset import DMCDataset
 from .sampler import BalancedBatchSampler
+from .meta_world_dataset import MetaWorldDataset

@@ -1,18 +1,28 @@
 from enum import Enum
+import logging
+import os
+import json
+import glob
+import random
+from typing import List
+from datetime import datetime
 
-class DMCTask(Enum):
-    """
-    Enum representing all DMC tasks.
-    Used to select which environment/task dataset to load.
-    """
-    CARTPOLE_BALANCE = 0
-    CARTPOLE_SWINGUP = 1
-    CHEETAH_RUN = 2
-    HOPPER_STAND = 3
-    FINGER_SPIN = 4
-    QUADRUPED_RUN = 5
-    QUADRUPED_WALK = 6
-    WALKER_WALK = 7
+import numpy as np
+import pandas as pd
+
+from .common import update_statistics_increment
+
+from pathlib import Path
+
+_logger = logging.getLogger(__name__)
+
+# Constants for filenames and labels
+META_DATASET_FILE = "meta_dataset.json"
+NORMAL_STATISTICS_FILE = "train_normal_stats.npz"
+ANOMAL_STATISTICS_FILE = "train_anomaly_stats.npz"
+
+NORMAL_LABEL: bool = False     # normal data label
+ANOMALY_LABEL: bool = True     # anomaly data label
 
 
 def obtain_meta_data(
@@ -21,7 +31,6 @@ def obtain_meta_data(
     use_unsupervised_training,
     use_anomalous_as_normal=False,
     *,
-    shuffle_train_files: bool = False,
     shuffle_test_files: bool = False,
     shuffle_seed: int = 0,
 ):
@@ -30,10 +39,9 @@ def obtain_meta_data(
 
     Input:
     - json_path: path to meta_dataset.json
-    - tasks: list of DMCTask
+    - tasks: list of Task
     - use_unsupervised_training: whether to keep a single training class
     - use_anomalous_as_normal: whether to treat anomalous files as label 0 and normal files as label 1
-    - shuffle_train_files: whether to deterministically shuffle the training file order
     - shuffle_test_files: whether to deterministically shuffle the test file order
     - shuffle_seed: seed used for deterministic shuffling
 
@@ -75,10 +83,6 @@ def obtain_meta_data(
                     train_meta_datas.append([file_path, length, exposed_label])
         else:
             train_meta_datas.extend(temporary_meta_datas)
-
-    if shuffle_train_files and train_meta_datas:
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(train_meta_datas)
 
     if shuffle_test_files and test_meta_datas:
         rng = random.Random(shuffle_seed)

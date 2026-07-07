@@ -3,6 +3,7 @@ import os
 from typing import Tuple, Optional, Union, Callable, Dict, Any, List
 import logging
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,10 @@ from timesead.data.preprocessing.control_task_common import construct_meta_data,
 
 
 _logger = logging.getLogger(__name__)
+
+
+def _default_preprocess_path(feature_set: str) -> str:
+    return str(Path(os.getcwd()) / "data" / "dmc" / "preprocess" / feature_set)
 
 
 
@@ -43,6 +48,11 @@ class DMCDataset(BaseTSDataset):
             shuffle_train_files: bool = False,
             shuffle_test_files: bool = False,
             shuffle_seed: int = 0,
+            feature_set: str = "videomae",
+            normal_feature_dir: str = "normal_features",
+            anomaly_feature_dir: str = "random_features",
+            preprocess_path: Optional[str] = None,
+            feature_key: str = "features",
             ):
         """
 
@@ -56,6 +66,11 @@ class DMCDataset(BaseTSDataset):
         :param use_anomalous_as_normal: Whether anomalous training files should be used as the single training class.
         :param download: Whether to download the dataset if it doesn't exist.
         :param preprocess: Whether to setup the dataset for experiments.
+        :param feature_set: Name of the feature extractor/cache namespace, e.g. videomae or vqgan.
+        :param normal_feature_dir: Folder under each split containing normal feature files.
+        :param anomaly_feature_dir: Folder under each split containing anomalous feature files.
+        :param preprocess_path: Optional explicit metadata/statistics path.
+        :param feature_key: Key inside each npz file that contains the feature array.
         """
 
         # ensure task_id is a list
@@ -75,7 +90,15 @@ class DMCDataset(BaseTSDataset):
         self.dataset_path = dataset_path
         self.train_dataset_path = os.path.join(self.dataset_path, 'train')
         self.test_dataset_path = os.path.join(self.dataset_path, 'test')
-        self.preprocess_path = os.path.join(os.getcwd(), "data/dmc/preprocess")
+        self.feature_set = feature_set
+        self.normal_feature_dir = normal_feature_dir
+        self.anomaly_feature_dir = anomaly_feature_dir
+        self.feature_key = feature_key
+        self.preprocess_path = (
+            preprocess_path
+            if preprocess_path is not None
+            else _default_preprocess_path(feature_set)
+        )
 
         self.training = training
         self.use_unsupervised_training = use_unsupervised_training
@@ -102,11 +125,16 @@ class DMCDataset(BaseTSDataset):
                 missing_tasks = missing_tasks,
                 data_dir = self.dataset_path,
                 save_dir=self.preprocess_path,
+                feature_set=self.feature_set,
+                normal_feature_dir=self.normal_feature_dir,
+                anomaly_feature_dir=self.anomaly_feature_dir,
+                feature_key=self.feature_key,
                 )
 
         # placeholders for loaded data
         self.inputs = None
         self.targets = None
+        self._num_features = None
 
         # load metadata + setup normalization
         self.intialize_meta_data(standardize=standardize)
@@ -138,18 +166,29 @@ class DMCDataset(BaseTSDataset):
         self.train_files, self.train_lengths, self.train_labels = parse_meta_data(self.train_meta_datas)
         self.test_files, self.test_lengths, self.test_labels = parse_meta_data(self.test_meta_datas)
 
-        # compute dataset statistics (mean, std, etc.)
-        stats = get_stats(
-            path=self.preprocess_path,
-            tasks=self.task_id,
-            use_unsupervised_training=self.use_unsupervised_training,
-            use_anomalous_as_normal=self.use_anomalous_as_normal,
-        )
+        stats = None
+        try:
+            # compute dataset statistics (mean, std, etc.)
+            stats = get_stats(
+                path=self.preprocess_path,
+                tasks=self.task_id,
+                use_unsupervised_training=self.use_unsupervised_training,
+                use_anomalous_as_normal=self.use_anomalous_as_normal,
+            )
+        except FileNotFoundError:
+            if standardize:
+                raise
+
+        self._num_features = self._infer_num_features(stats)
 
         # define normalization function
         if callable(standardize):
+            if stats is None:
+                raise RuntimeError("DMC standardization requires precomputed statistics.")
             self.standardize_fn = functools.partial(standardize, stats=stats)
         elif standardize:
+            if stats is None:
+                raise RuntimeError("DMC standardization requires precomputed statistics.")
             self.standardize_fn = functools.partial(minmax_scaler, stats=stats)
         else:
             self.standardize_fn = None
@@ -175,7 +214,7 @@ class DMCDataset(BaseTSDataset):
             file_name = os.path.join(load_path, file_name)
 
             # load features: shape (T, F)
-            data = np.load(file_name)['features']
+            data = np.load(file_name)[self.feature_key]
     
             # create label per timestep
             if file_label:
@@ -218,7 +257,7 @@ class DMCDataset(BaseTSDataset):
 
     @property
     def num_features(self) -> int:
-        return 768
+        return self._num_features
 
     @staticmethod
     def get_default_pipeline() -> Dict[str, Dict[str, Any]]:
@@ -227,9 +266,8 @@ class DMCDataset(BaseTSDataset):
             'cache': {'class': 'CacheTransform', 'args': {}}
         }
 
-    @staticmethod
-    def get_feature_names():
-        column_names = [f"feature_{i}" for i in range(768)]
+    def get_feature_names(self):
+        column_names = [f"feature_{i}" for i in range(self.num_features)]
         return column_names
 
     def _check_exists(self) -> bool:
@@ -241,7 +279,7 @@ class DMCDataset(BaseTSDataset):
         """
         # Only checks if the `data` folder exists
         data_types = ['test', 'train']
-        features = ["normal_features", "random_features"]
+        features = [self.normal_feature_dir, self.anomaly_feature_dir]
 
         for data_type in data_types:
             for feature in features:
@@ -255,6 +293,28 @@ class DMCDataset(BaseTSDataset):
                     if not os.path.isdir(data_folder_path):
                         return False
         return True
+
+    def _first_metadata_file_path(self) -> Optional[str]:
+        for meta_datas, base_path in (
+                (self.train_meta_datas, self.train_dataset_path),
+                (self.test_meta_datas, self.test_dataset_path),
+        ):
+            if meta_datas:
+                return os.path.join(base_path, meta_datas[0][0])
+        return None
+
+    def _infer_num_features(self, stats: Optional[Dict[str, Any]]) -> int:
+        if stats is not None:
+            mean = stats.get("mean")
+            if mean is not None:
+                return int(np.asarray(mean).shape[0])
+
+        first_file = self._first_metadata_file_path()
+        if first_file is None:
+            raise RuntimeError("Cannot infer DMC feature size from empty metadata.")
+
+        with np.load(first_file) as data:
+            return int(data[self.feature_key].shape[-1])
 
     def _search_missing_preprocessed_tasks(self) -> List[DMCTask]:
         """

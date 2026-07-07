@@ -152,6 +152,10 @@ def test_supervised_dmc_config_uses_new_dataset_flags_and_supervised_entrypoint(
     cfg = OmegaConf.load(config_path)
 
     assert "use_normal_only" not in cfg.dataset.ds_args
+    assert cfg.dataset.ds_args.feature_set == "videomae"
+    assert cfg.dataset.ds_args.normal_feature_dir == "normal_features"
+    assert cfg.dataset.ds_args.anomaly_feature_dir == "random_features"
+    assert cfg.dataset.ds_args.feature_key == "features"
     assert cfg.dataset.ds_args.use_unsupervised_training is False
     assert cfg.dataset.ds_args.use_anomalous_as_normal is False
     assert cfg.training.supervised is True

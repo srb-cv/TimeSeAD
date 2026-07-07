@@ -4,7 +4,7 @@ import os
 import json
 import glob
 import random
-from typing import List
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 import numpy as np
@@ -32,6 +32,7 @@ def obtain_meta_data(
     use_anomalous_as_normal=False,
     *,
     shuffle_test_files: bool = False,
+    shuffle_train_files: bool = False,
     shuffle_seed: int = 0,
 ):
     """
@@ -87,6 +88,10 @@ def obtain_meta_data(
     if shuffle_test_files and test_meta_datas:
         rng = random.Random(shuffle_seed)
         rng.shuffle(test_meta_datas)
+
+    if shuffle_train_files and train_meta_datas:
+        rng = random.Random(shuffle_seed)
+        rng.shuffle(train_meta_datas)
 
     return train_meta_datas, test_meta_datas
 
@@ -171,14 +176,14 @@ def get_stats(path, tasks, use_unsupervised_training, use_anomalous_as_normal=Fa
     return final_stats
 
 
-def load_features(file):
+def load_features(file, feature_key: str = "features"):
     """
     Load .npz file and return as DataFrame.
 
     Output:
     - DataFrame shape (T, F)
     """
-    data = np.load(file)['features']
+    data = np.load(file)[feature_key]
     return pd.DataFrame(data)
 
 
@@ -193,7 +198,13 @@ def create_file_name(task_name, is_abnormal, num_features):
     return f"{int(is_abnormal)}_{task_name}_{num_features}f_{ts}.csv"
 
 
-def obtain_data_length_and_data_statistics(data_path, is_anomaly):
+def obtain_data_length_and_data_statistics(
+        data_path,
+        is_anomaly,
+        *,
+        relative_to: Optional[str] = None,
+        feature_key: str = "features",
+):
     """
     Process all files in a folder.
 
@@ -206,27 +217,40 @@ def obtain_data_length_and_data_statistics(data_path, is_anomaly):
     - stats: (mean, min, max, n)
     """
 
-    files = glob.glob(os.path.join(data_path, "*.npz"))
+    files = sorted(glob.glob(os.path.join(data_path, "*.npz")))
 
     mean, min, max, n = None, None, None, 0
     file_length_pairs = []
 
     for file in files:
-        df = load_features(file)
+        df = load_features(file, feature_key=feature_key)
 
         # update running statistics
         mean, min, max, n = update_statistics_increment(df, mean, min, max, n)
 
         # store relative path + length + label
         p = Path(file)
+        if relative_to is not None:
+            try:
+                relative_file = p.relative_to(relative_to)
+            except ValueError:
+                relative_file = Path(*p.parts[-3:])
+        else:
+            relative_file = Path(*p.parts[-3:])
         file_length_pairs.append(
-            (str(Path(*p.parts[-3:])), df.shape[0], is_anomaly)
+            (str(relative_file), df.shape[0], is_anomaly)
         )
 
     return file_length_pairs, (mean, min, max, n)
 
 
-def get_directories_of_raw_data(raw_data_dir, task_name):
+def get_directories_of_raw_data(
+        raw_data_dir,
+        task_name,
+        *,
+        normal_feature_dir: str = "normal_features",
+        anomaly_feature_dir: str = "random_features",
+):
     """
     Get all relevant directories for a task.
 
@@ -238,10 +262,10 @@ def get_directories_of_raw_data(raw_data_dir, task_name):
     """
 
     return (
-        os.path.join(raw_data_dir, 'train', "normal_features", task_name),
-        os.path.join(raw_data_dir, 'train', "random_features", task_name),
-        os.path.join(raw_data_dir, 'test', "normal_features", task_name),
-        os.path.join(raw_data_dir, 'test', "random_features", task_name),
+        os.path.join(raw_data_dir, 'train', normal_feature_dir, task_name),
+        os.path.join(raw_data_dir, 'train', anomaly_feature_dir, task_name),
+        os.path.join(raw_data_dir, 'test', normal_feature_dir, task_name),
+        os.path.join(raw_data_dir, 'test', anomaly_feature_dir, task_name),
     )
 
 
@@ -261,7 +285,16 @@ def construct_json(train_length_pairs, test_length_pairs):
     }
 
 
-def construct_meta_data(missing_tasks, data_dir, save_dir):
+def construct_meta_data(
+        missing_tasks,
+        data_dir,
+        save_dir,
+        *,
+        feature_set: str = "videomae",
+        normal_feature_dir: str = "normal_features",
+        anomaly_feature_dir: str = "random_features",
+        feature_key: str = "features",
+):
     """
     Main preprocessing function.
 
@@ -290,19 +323,34 @@ def construct_meta_data(missing_tasks, data_dir, save_dir):
     else:
         datas = {}
 
+    datas["_metadata"] = {
+        "feature_set": feature_set,
+        "normal_feature_dir": normal_feature_dir,
+        "anomaly_feature_dir": anomaly_feature_dir,
+        "feature_key": feature_key,
+    }
+
     for task in missing_tasks:
         task_name = task.name.lower()
 
         # get all directories
         normal_train, anomaly_train, normal_test, anomaly_test = \
-            get_directories_of_raw_data(data_dir, task_name)
+            get_directories_of_raw_data(
+                data_dir,
+                task_name,
+                normal_feature_dir=normal_feature_dir,
+                anomaly_feature_dir=anomaly_feature_dir,
+            )
 
         task_path = os.path.join(save_dir, task_name)
         os.makedirs(task_path, exist_ok=True)
 
         # ---- TRAIN NORMAL ----
         train_length_pairs, stats = obtain_data_length_and_data_statistics(
-            normal_train, is_anomaly=False
+            normal_train,
+            is_anomaly=False,
+            relative_to=os.path.join(data_dir, 'train'),
+            feature_key=feature_key,
         )
 
         mean, min, max, n = stats
@@ -311,7 +359,10 @@ def construct_meta_data(missing_tasks, data_dir, save_dir):
 
         # ---- TRAIN ANOMALY ----
         temp_pairs, stats = obtain_data_length_and_data_statistics(
-            anomaly_train, is_anomaly=True
+            anomaly_train,
+            is_anomaly=True,
+            relative_to=os.path.join(data_dir, 'train'),
+            feature_key=feature_key,
         )
 
         mean, min, max, n = stats
@@ -322,11 +373,17 @@ def construct_meta_data(missing_tasks, data_dir, save_dir):
 
         # ---- TEST DATA ----
         test_length_pairs, _ = obtain_data_length_and_data_statistics(
-            normal_test, is_anomaly=False
+            normal_test,
+            is_anomaly=False,
+            relative_to=os.path.join(data_dir, 'test'),
+            feature_key=feature_key,
         )
 
         temp_pairs, _ = obtain_data_length_and_data_statistics(
-            anomaly_test, is_anomaly=True
+            anomaly_test,
+            is_anomaly=True,
+            relative_to=os.path.join(data_dir, 'test'),
+            feature_key=feature_key,
         )
 
         test_length_pairs += temp_pairs

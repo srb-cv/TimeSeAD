@@ -3,7 +3,11 @@ dataset:
   name: DMCDataset
   ds_args:
     training: true
-    task_id: [1]
+    task_id: 1
+    feature_set: videomae
+    normal_feature_dir: normal_features
+    anomaly_feature_dir: random_features
+    feature_key: features
     use_unsupervised_training: false
     use_anomalous_as_normal: false
     shuffle_train_files: true # needed for supervised training to ensure that the model does not see all normal samples before anomalous ones
@@ -13,13 +17,13 @@ dataset:
     prediction:
       class: timesead.models.supervised.DSADTargetTransform
       args:
-        window_size: 32
+        window_size: 4
         replace_labels: false #does not matter 
   test_pipeline:
     prediction:
       class: timesead.models.supervised.DSADTargetTransform
       args:
-        window_size: 32
+        window_size: 4
         replace_labels: false #does not matter
   use_dataset_pipeline: false
   split: [0.75, 0.25]
@@ -38,7 +42,7 @@ training:
     args:
       milestones: [20]
       gamma: 0.1
-  epochs: 70
+  epochs: 10
   device: cpu
   loss: DSADLoss
   trainer: timesead.optim.trainer.Trainer

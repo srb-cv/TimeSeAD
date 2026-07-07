@@ -1,11 +1,12 @@
 import os
+import json
 from pathlib import Path
 
 import pytest
 import torch
 import numpy as np
 
-from timesead.data.dmc_dataset import DMCDataset   # adjust import if needed
+from timesead.data.dmc_dataset import DMCDataset, _default_preprocess_path
 from timesead.data.preprocessing.dmc import DMCTask
 from timesead.utils.metadata import DATA_DIRECTORY
 from timesead.data.transforms import DatasetSource, make_dataset_split, make_pipe_from_dict
@@ -19,6 +20,11 @@ TIME_SPLIT_WINDOW = 64
 # ---------- Helper ----------
 def _real_dmc_root() -> Path:
     return Path(DATA_DIRECTORY) / "dmc"
+
+
+def _write_feature_file(path: Path, data: np.ndarray, feature_key: str = "features"):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, **{feature_key: data.astype(np.float32)})
 
 
 def _expected_time_split_lengths(lengths: list[int], *splits: float) -> list[list[int]]:
@@ -50,10 +56,101 @@ def real_dmc_root():
     if not train_dir.is_dir() or not test_dir.is_dir():
         pytest.skip("DMC dataset not found locally")
 
+    preprocess_meta = Path(_default_preprocess_path("videomae")) / "meta_dataset.json"
+    if not preprocess_meta.is_file():
+        pytest.skip("DMC videomae preprocess cache not found locally")
+
     return root
 
 
 # ---------- Tests ----------
+
+def test_dmc_default_preprocess_path_is_feature_set_specific():
+    assert Path(_default_preprocess_path("vqgan")).parts[-4:] == (
+        "data",
+        "dmc",
+        "preprocess",
+        "vqgan",
+    )
+
+
+def test_dmc_dataset_supports_configurable_feature_dirs_and_infers_feature_size(tmp_path):
+    dataset_root = tmp_path / "dmc"
+    preprocess_path = tmp_path / "preprocess" / "vqgan"
+    feature_key = "embeddings"
+
+    _write_feature_file(
+        dataset_root / "train" / "vqgan_normal" / "cheetah_run" / "normal_train.npz",
+        np.arange(20).reshape(4, 5),
+        feature_key=feature_key,
+    )
+    _write_feature_file(
+        dataset_root / "train" / "vqgan_random" / "cheetah_run" / "anomaly_train.npz",
+        np.arange(15).reshape(3, 5),
+        feature_key=feature_key,
+    )
+    _write_feature_file(
+        dataset_root / "test" / "vqgan_normal" / "cheetah_run" / "normal_test.npz",
+        np.arange(10).reshape(2, 5),
+        feature_key=feature_key,
+    )
+    _write_feature_file(
+        dataset_root / "test" / "vqgan_random" / "cheetah_run" / "anomaly_test.npz",
+        np.arange(10, 20).reshape(2, 5),
+        feature_key=feature_key,
+    )
+
+    dataset = DMCDataset(
+        dataset_path=str(dataset_root),
+        task_id=2,
+        training=True,
+        standardize=False,
+        preprocess=True,
+        feature_set="vqgan",
+        normal_feature_dir="vqgan_normal",
+        anomaly_feature_dir="vqgan_random",
+        preprocess_path=str(preprocess_path),
+        feature_key=feature_key,
+    )
+
+    assert dataset.num_features == 5
+    assert len(dataset.get_feature_names()) == 5
+    assert dataset.train_files == ["vqgan_normal/cheetah_run/normal_train.npz"]
+
+    inputs, targets = dataset[0]
+    assert inputs[0].shape == (4, 5)
+    assert targets[0].tolist() == [0, 0, 0, 0]
+
+    meta = json.loads((preprocess_path / "meta_dataset.json").read_text(encoding="utf-8"))
+    assert meta["_metadata"] == {
+        "feature_set": "vqgan",
+        "normal_feature_dir": "vqgan_normal",
+        "anomaly_feature_dir": "vqgan_random",
+        "feature_key": feature_key,
+    }
+    assert meta["cheetah_run"]["test"] == [
+        ["vqgan_normal/cheetah_run/normal_test.npz", 2, False],
+        ["vqgan_random/cheetah_run/anomaly_test.npz", 2, True],
+    ]
+
+    test_dataset = DMCDataset(
+        dataset_path=str(dataset_root),
+        task_id=2,
+        training=False,
+        standardize=False,
+        preprocess=False,
+        feature_set="vqgan",
+        normal_feature_dir="vqgan_normal",
+        anomaly_feature_dir="vqgan_random",
+        preprocess_path=str(preprocess_path),
+        feature_key=feature_key,
+    )
+    assert test_dataset.num_features == 5
+    assert test_dataset.test_files == [
+        "vqgan_normal/cheetah_run/normal_test.npz",
+        "vqgan_random/cheetah_run/anomaly_test.npz",
+    ]
+
 
 def test_dmc_dataset_basic_properties(real_dmc_root):
     dataset = DMCDataset(

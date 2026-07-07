@@ -4,6 +4,10 @@ dataset:
   ds_args:
     training: true
     task_id: [1]
+    feature_set: vqgan
+    normal_feature_dir: normal_features_vqgan
+    anomaly_feature_dir: random_features_vqgan
+    feature_key: features
     use_unsupervised_training: true
     use_anomalous_as_normal: false
     shuffle_test_files: true
@@ -28,7 +32,7 @@ training:
   optimizer:
     class: torch.optim.Adam
     args: {}
-  batch_size: 128
+  batch_size: 64
   batch_dim: 1
   num_workers: 0
   drop_last: false
@@ -64,7 +68,7 @@ experiment:
   evaluate_after_training: true
   post_train_evaluation:
     protocol: holdout_calibration
-    split: [0.3, 0.7]
+    split: [0.5, 0.5]
     tune_split_index: 0
     eval_split_index: 1
     threshold_metric: ${sweep.validation_metric}

@@ -3,6 +3,7 @@ from hydra.core.hydra_config import HydraConfig
 
 from timesead.models.generative import Donut, DonutAnomalyDetector
 from experiments_hydra.utils.config import to_plain_config
+from experiments_hydra.utils.post_training import maybe_evaluate_after_training
 
 from experiments_hydra.utils import (
     load_best_model_if_available,
@@ -18,7 +19,7 @@ from experiments_hydra.utils import (
 def run(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
 
-    with start_mlflow_run(cfg) as logger:
+    with start_mlflow_run(cfg, output_dir=output_dir) as logger:
         save_active_run_id(output_dir)
         train_ds, val_ds = load_dataset(**to_plain_config(cfg.dataset))
         model = Donut(
@@ -35,6 +36,7 @@ def run(cfg):
             detector = DonutAnomalyDetector(model, num_mc_samples=cfg.detector.num_mc_samples).to(cfg.training.device)
 
         save_final_artifact({"model": model, "detector": detector}, output_dir)
+        maybe_evaluate_after_training(cfg, output_dir)
         return {"model": model, "detector": detector}
 
 

@@ -1,0 +1,107 @@
+# @package _global_
+dataset:
+  name: MiniSMDDataset
+  ds_args:
+    training: true
+    server_id: 0
+    path: /home/varshney/magus/projects/TimeSeAD/data/mini_smd
+  pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 10
+    reconstruction:
+      class: ReconstructionTargetTransform
+      args:
+        replace_labels: true
+  test_pipeline:
+    window:
+      class: WindowTransform
+      args:
+        window_size: 10
+  use_dataset_pipeline: true
+  split: [0.75, 0.25]
+  split_axis: time
+
+training:
+  optimizer:
+    class: torch.optim.Adam
+    args:
+      lr: 0.001
+  batch_size: 128
+  batch_dim: 0
+  num_workers: 0
+  drop_last: false
+  scheduler:
+    class: torch.optim.lr_scheduler.MultiStepLR
+    args:
+      milestones: [20]
+      gamma: 0.1
+  epochs: 1
+  device: cpu
+  loss: timesead.models.generative.donut.MaskedVAELoss
+  trainer: timesead.optim.trainer.Trainer
+  trainer_hooks:
+    - event: post_validation
+      hook: timesead.optim.trainer.EarlyStoppingHook
+  checkpoint_interval: 15
+  deterministic: false
+  seed: 0
+
+model:
+  hidden_dims: [16]
+  latent_dim: 4
+  mask_prob: 0.01
+
+detector:
+  num_mc_samples: 2
+
+experiment:
+  name: parity.mini_smd.vae.train_donut
+  family: generative
+  entrypoint: experiments_hydra.generative.vae.train_donut
+  mlflow_experiment_name: TimeSeAD-Hydra
+  tracking_uri: null
+  train_detector: true
+  evaluate_after_training: false
+  tags:
+    pilot: "true"
+
+sweep:
+  selection_metric: best_f1_score
+  validation_metric: best_f1_score
+  evaluation_metrics:
+    - best_f1_score
+    - auprc
+  mode: max
+  training_param_updates:
+    dataset:
+      name: MiniSMDDataset
+      ds_args:
+        server_id: 0
+        path: /home/varshney/magus/projects/TimeSeAD/data/mini_smd
+    training:
+      epochs: 1
+      optimizer:
+        args:
+          lr: 0.001
+  training_param_grid:
+    model:
+      hidden_dims:
+        - [16]
+      latent_dim:
+        - 4
+        - 8
+      mask_prob:
+        - 0.01
+    dataset:
+      pipeline:
+        window:
+          args:
+            window_size:
+              - 10
+  detector_param_grid:
+    detector:
+      num_mc_samples:
+        - 2
+        - 4

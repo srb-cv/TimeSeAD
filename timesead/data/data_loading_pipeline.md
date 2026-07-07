@@ -27,7 +27,7 @@ Each dataset must provide:
 - `__getitem__()`: returns `(inputs, targets)` as tuples of tensors
 - `get_default_pipeline()`: default transforms to apply for this dataset
 
-Important detail: datasets typically return whole time series, not pre-windowed samples.
+Important detail: datasets typically return whole time series, not pre-windowed samples. windowing happens through transforms.
 
 For example, [`SWaTDataset`](swat_dataset.py) in [`timesead/data/swat_dataset.py`](swat_dataset.py):
 

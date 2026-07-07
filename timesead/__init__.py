@@ -3,6 +3,7 @@
 __all__ = [
     "data",
     "evaluation",
+    "inference",
     "models",
     "optim",
     "utils",

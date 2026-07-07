@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Any
 
-import mlflow
 import torch
 
 
@@ -11,6 +10,4 @@ def save_final_artifact(payload: Any, output_dir: str, filename: str = "final_mo
 
     artifact_path = artifact_dir / filename
     torch.save(payload, artifact_path)
-    mlflow.log_artifact(str(artifact_path), artifact_path="artifacts")
     return artifact_path
-

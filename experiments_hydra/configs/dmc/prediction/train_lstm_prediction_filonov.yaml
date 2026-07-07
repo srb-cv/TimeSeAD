@@ -1,0 +1,122 @@
+# @package _global_
+dataset:
+  name: DMCDataset
+  ds_args:
+    training: true
+    task_id: [1]
+    feature_set: vqgan
+    normal_feature_dir: normal_features_vqgan
+    anomaly_feature_dir: random_features_vqgan
+    feature_key: features
+    use_unsupervised_training: true
+    use_anomalous_as_normal: false
+    shuffle_test_files: true
+    shuffle_seed: 42
+  pipeline:
+    prediction:
+      class: timesead.models.prediction.LSTMS2STargetTransform
+      args:
+        window_size: 4
+        replace_labels: true
+  test_pipeline:
+    prediction:
+      class: timesead.models.prediction.LSTMS2STargetTransform
+      args:
+        window_size: 4
+        replace_labels: false
+  use_dataset_pipeline: false
+  split: [0.75, 0.25]
+  split_axis: batch
+
+training:
+  optimizer:
+    class: torch.optim.Adam
+    args: {}
+  batch_size: 64
+  batch_dim: 1
+  num_workers: 0
+  drop_last: false
+  scheduler:
+    class: torch.optim.lr_scheduler.MultiStepLR
+    args:
+      milestones: [20]
+      gamma: 0.1
+  epochs: 30
+  device: cuda
+  loss: torch.nn.MSELoss
+  trainer: timesead.optim.trainer.Trainer
+  trainer_hooks:
+    - event: post_validation
+      hook: timesead.optim.trainer.EarlyStoppingHook
+  checkpoint_interval: 15
+  deterministic: false
+  seed: 0
+
+model:
+  lstm_hidden_dims: [30, 20]
+  linear_hidden_layers: []
+  linear_activation: torch.nn.ELU
+  dropout: 0.0
+
+experiment:
+  name: exathlon.prediction.train_lstm_prediction_filonov_normal_search_8
+  family: prediction
+  entrypoint: experiments_hydra.prediction.train_lstm_prediction_filonov
+  mlflow_experiment_name: TimeSeAD-Hydra
+  tracking_uri: null
+  train_detector: true
+  evaluate_after_training: true
+  post_train_evaluation:
+    protocol: holdout_calibration
+    split: [0.5, 0.5]
+    tune_split_index: 0
+    eval_split_index: 1
+    threshold_metric: ${sweep.validation_metric}
+    fit_detector_on: training_validation
+    metric_names: ${sweep.evaluation_metrics}
+  tags:
+    pilot: "true"
+
+sweep:
+  selection_metric: best_ts_f1_score
+  validation_metric: best_ts_f1_score
+  evaluation_metrics:
+    - best_ts_f1_score
+    - ts_auprc
+    - best_ts_f1_score_classic
+    - ts_auprc_unweighted
+    - best_f1_score
+    - auprc
+  mode: max
+  training_param_updates:
+    dataset:
+      name: DMCDataset
+    training:
+      epochs: 20
+  training_param_grid:
+    model:
+      lstm_hidden_dims:
+        - [30, 20]
+        - [50, 30]
+        - [50, 30, 20]
+      linear_hidden_layers:
+        - []
+        - [40]
+        - [30, 30]
+      dropout:
+        - 0.0
+        - 0.15
+    dataset:
+      pipeline:
+        prediction:
+          args:
+            window_size:
+              - 4
+              - 8
+              - 16
+    training:
+      optimizer:
+        args:
+          lr:
+            - 1.0e-4
+            - 1.0e-3
